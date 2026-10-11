@@ -1101,14 +1101,28 @@ const Popup = () => {
   const [clientState, setClientState, isClientStateLoading] =
     useBrowserStorageState('clientState', undefined);
   const [clientAuthStateSynced, setClientAuthStateSynced] = useState(false);
+  const [isRenewingSession, setIsRenewingSession] = useState(false);
 
   useEffect(() => {
-    const syncClientAuthState = async () => {
-      const isAuthenticated =
-        clientState?.setupUrl !== undefined &&
-        (await new ICloudClient(clientState.setupUrl).isAuthenticated());
+    const liveClientState = async (): Promise<Store['clientState']> => {
+      if (clientState === undefined) {
+        return undefined;
+      }
+      if (await new ICloudClient(clientState.setupUrl).isAuthenticated()) {
+        return clientState;
+      }
+      setIsRenewingSession(true);
+      return (await browser.runtime.sendMessage({
+        type: MessageType.RenewSessionRequest,
+        data: undefined,
+      })) as Store['clientState'];
+    };
 
-      if (isAuthenticated) {
+    const syncClientAuthState = async () => {
+      const synced = await liveClientState();
+
+      if (synced) {
+        setClientState(synced);
         setState((prevState) =>
           prevState === PopupState.SignedOut
             ? PopupState.Authenticated
@@ -1120,6 +1134,7 @@ const Popup = () => {
         performDeauthSideEffects();
       }
 
+      setIsRenewingSession(false);
       setClientAuthStateSynced(true);
     };
 
@@ -1130,7 +1145,7 @@ const Popup = () => {
     setState,
     setClientState,
     clientAuthStateSynced,
-    clientState?.setupUrl,
+    clientState,
     isClientStateLoading,
   ]);
 
@@ -1141,7 +1156,9 @@ const Popup = () => {
           left={
             <>
               <Spinner />
-              Checking your iCloud session
+              {isRenewingSession
+                ? 'Reconnecting to iCloud…'
+                : 'Checking your iCloud session'}
             </>
           }
         />
