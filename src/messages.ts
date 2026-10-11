@@ -37,7 +37,7 @@ export const sendMessageToTab = async (
   type: MessageType,
   data: unknown,
   tab?: browser.Tabs.Tab
-): Promise<void> => {
+): Promise<unknown> => {
   if (tab === undefined) {
     [tab] = await browser.tabs.query({
       active: true,
@@ -46,7 +46,7 @@ export const sendMessageToTab = async (
   }
 
   if (tab?.id !== undefined) {
-    await browser.tabs.sendMessage(tab.id, {
+    return await browser.tabs.sendMessage(tab.id, {
       type,
       data,
     });

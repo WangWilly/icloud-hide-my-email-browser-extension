@@ -15,7 +15,3 @@ input[type='search']:focus::-webkit-search-cancel-button {
   opacity: 0.25;
   pointer-events: all;
 }
-
-input[type='search'].dark::-webkit-search-cancel-button {
-  filter: invert(1);
-}

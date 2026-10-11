@@ -14,6 +14,7 @@ export type Options = {
 export type Store = {
   popupState: PopupState;
   iCloudHmeOptions: Options; // TODO: rename key to options
+  mutedSites: string[];
   clientState?: {
     setupUrl: ConstructorParameters<typeof ICloudClient>[0];
     webservices: ConstructorParameters<typeof ICloudClient>[1];
@@ -28,6 +29,7 @@ export const DEFAULT_STORE = {
       contextMenu: true,
     },
   },
+  mutedSites: [] as string[],
   clientState: undefined,
 };
 

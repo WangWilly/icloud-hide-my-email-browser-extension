@@ -20,6 +20,8 @@
     "prettier:check": "prettier --check '**/*.{js,jsx,ts,tsx,json,css,scss,md,eslintrc}'"
   },
   "dependencies": {
+    "@fontsource-variable/public-sans": "^5.1.1",
+    "@fontsource/fragment-mono": "^5.1.1",
     "@fortawesome/fontawesome-svg-core": "^6.6.0",
     "@fortawesome/free-brands-svg-icons": "^6.6.0",
     "@fortawesome/free-regular-svg-icons": "^6.6.0",
@@ -28,6 +30,7 @@
     "fuse.js": "^6.6.2",
     "lodash.isequal": "^4.5.0",
     "lodash.startcase": "^4.4.0",
+    "lucide-react": "^0.460.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "uuid": "^8.3.2",
