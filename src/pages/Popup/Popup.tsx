@@ -2,47 +2,58 @@ import React, {
   useState,
   Dispatch,
   useEffect,
-  ButtonHTMLAttributes,
-  DetailedHTMLProps,
-  ReactNode,
   ReactElement,
+  useCallback,
+  SetStateAction,
 } from 'react';
 import ICloudClient, {
   PremiumMailSettings,
   HmeEmail,
+  ListHmeResult,
+  DEFAULT_SETUP_URL,
+  CN_SETUP_URL,
 } from '../../iCloudClient';
 import './Popup.css';
 import { useBrowserStorageState } from '../../hooks';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-  faRefresh,
-  faClipboard,
-  faCheck,
-  faList,
-  faSignOut,
-  IconDefinition,
-  faPlus,
-  faTrashAlt,
-  faBan,
-  faSearch,
-  faInfoCircle,
-  faExternalLink,
-  faQuestionCircle,
-} from '@fortawesome/free-solid-svg-icons';
-import { faFirefoxBrowser } from '@fortawesome/free-brands-svg-icons';
+  BookOpen,
+  Check,
+  Copy,
+  List,
+  LogOut,
+  Power,
+  RefreshCw,
+  Search,
+  Settings,
+  Trash2,
+} from 'lucide-react';
 import { MessageType, sendMessageToTab } from '../../messages';
 import {
-  ErrorMessage,
-  LoadingButton,
+  Actions,
+  Address,
+  EditableRecordRow,
+  Eyebrow,
+  Footer,
+  Header,
+  Headline,
+  Hint,
+  Icon,
+  IconButton,
+  ListRow,
+  PrimaryButton,
+  Record,
+  RecordRow,
+  Rule,
+  Screen,
+  SecondaryButton,
   Spinner,
-  TitledComponent,
-  Link,
+  TextButton,
+  TextLink,
 } from '../../commonComponents';
-import { setBrowserStorageValue, Store } from '../../storage';
+import { DEFAULT_STORE, setBrowserStorageValue, Store } from '../../storage';
 
 import browser from 'webextension-polyfill';
 import Fuse from 'fuse.js';
-import isEqual from 'lodash.isequal';
 import {
   PopupAction,
   PopupState,
@@ -52,149 +63,165 @@ import {
 } from './stateMachine';
 import {
   CONTEXT_MENU_ITEM_ID,
+  SIGNED_IN_CTA_COPY,
   SIGNED_OUT_CTA_COPY,
 } from '../Background/constants';
 import { isFirefox } from '../../browserUtils';
 
 type TransitionCallback<T extends PopupAction> = (action: T) => void;
 
-const SignInInstructions = () => {
-  const userguideUrl = browser.runtime.getURL('userguide.html');
+const ICLOUD_URL = 'https://www.icloud.com';
+const MANAGE_PREVIEW_SIZE = 5;
 
-  return (
-    <TitledComponent title="Hide My Email" subtitle="Sign in to iCloud">
-      <div className="space-y-4">
-        <div className="text-sm space-y-2">
-          <p>
-            To use this extension, sign in to your iCloud account on{' '}
-            <Link
-              href="https://icloud.com"
-              className="font-semibold"
-              aria-label="Go to iCloud.com"
-            >
-              icloud.com
-            </Link>
-            .
-          </p>
-          <p>
-            Complete the full sign-in process, including{' '}
-            <span className="font-semibold">two-factor authentication</span> and{' '}
-            <span className="font-semibold">Trust This Browser</span>.
-          </p>
-        </div>
-        <div
-          className="flex p-3 text-sm border text-gray-600 rounded-lg bg-gray-50"
-          role="alert"
-        >
-          <FontAwesomeIcon icon={faInfoCircle} className="mr-2 mt-1" />
-          <span className="sr-only">Info</span>
-          <div>
-            <span className="font-semibold">Pro-tip:</span> Tick the{' '}
-            <span className="font-semibold">Keep me signed in</span> box
-          </div>
-        </div>
-        {isFirefox && (
-          <div
-            className="flex p-3 text-sm border text-gray-600 rounded-lg bg-gray-50"
-            role="alert"
-          >
-            <FontAwesomeIcon icon={faFirefoxBrowser} className="mr-2 mt-1" />
-            <span className="sr-only">Info</span>
-            <div>
-              If using{' '}
-              <Link
-                href="https://support.mozilla.org/en-US/kb/containers"
-                className="font-semibold"
-                aria-label="Firefox Multi-Account Containers docs"
-              >
-                Firefox Containers
-              </Link>
-              , sign in to iCloud from a tab outside of a container.
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <a
-            href={userguideUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="w-full justify-center text-white bg-sky-400 hover:bg-sky-500 focus:ring-4 focus:outline-hidden focus:ring-blue-300 font-medium rounded-lg px-5 py-2.5 text-center mr-2 inline-flex items-center"
-            aria-label="Help"
-          >
-            <FontAwesomeIcon icon={faQuestionCircle} className="mr-1" />
-            Help
-          </a>
-          <a
-            href="https://icloud.com"
-            target="_blank"
-            rel="noreferrer"
-            className="w-full justify-center text-white bg-sky-400 hover:bg-sky-500 focus:ring-4 focus:outline-hidden focus:ring-blue-300 font-medium rounded-lg px-5 py-2.5 text-center mr-2 inline-flex items-center"
-            aria-label="Go to iCloud.com"
-          >
-            <FontAwesomeIcon icon={faExternalLink} className="mr-1" /> Go to
-            icloud.com
-          </a>
-        </div>
-      </div>
-    </TitledComponent>
+const errorMessage = (e: unknown): string => {
+  const message = e instanceof Error ? e.message : String(e);
+  const failedRequest = message.match(
+    /^Request to \w+ (\S+) failed with status code (\d+)$/
   );
+  return failedRequest
+    ? `HTTP ${failedRequest[2]} from ${new URL(failedRequest[1]).hostname}`
+    : message;
 };
 
-const ReservationResult = (props: { hme: HmeEmail }) => {
-  const onCopyToClipboardClick = async () => {
-    await navigator.clipboard.writeText(props.hme.hme);
-  };
+const sameSite = (a: string, b: string): boolean =>
+  a.replace(/^www\./, '').toLowerCase() ===
+  b.replace(/^www\./, '').toLowerCase();
 
-  const onAutofillClick = async () => {
-    await sendMessageToTab(MessageType.Autofill, props.hme.hme);
-  };
+const isSavedForSite = (hme: HmeEmail, host: string): boolean =>
+  hme.isActive &&
+  host !== '' &&
+  [hme.label, hme.domain].some((value) => value && sameSite(value, host));
 
-  const btnClassName =
-    'focus:outline-hidden text-white bg-green-700 hover:bg-green-800 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-5 py-2.5 block w-full';
-
-  return (
-    <div
-      className="space-y-2 p-2 text-sm text-green-700 bg-green-100 rounded-lg"
-      role="alert"
-    >
-      <p>
-        <strong>{props.hme.hme}</strong> has successfully been reserved!
-      </p>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          className={btnClassName}
-          onClick={onCopyToClipboardClick}
-        >
-          <FontAwesomeIcon icon={faClipboard} className="mr-1" />
-          Copy to clipboard
-        </button>
-        <button
-          type="button"
-          className={btnClassName}
-          onClick={onAutofillClick}
-        >
-          <FontAwesomeIcon icon={faCheck} className="mr-1" />
-          Autofill
-        </button>
-      </div>
-    </div>
-  );
+const formatDay = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const isThisYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: isThisYear ? undefined : 'numeric',
+  });
 };
 
-const FooterButton = (
-  props: { label: string; icon: IconDefinition } & DetailedHTMLProps<
-    ButtonHTMLAttributes<HTMLButtonElement>,
-    HTMLButtonElement
-  >
-) => {
+const formatDateTime = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const day = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const time = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${day} · ${time}`;
+};
+
+const openUserguide = () =>
+  browser.tabs.create({ url: browser.runtime.getURL('userguide.html') });
+
+const openOptions = () => browser.runtime.openOptionsPage();
+
+const openICloud = () => browser.tabs.create({ url: ICLOUD_URL });
+
+// Resolves to whether the page had at least one email field to fill.
+const fillOnPage = async (hme: string): Promise<boolean> => {
+  try {
+    const filledCount = await sendMessageToTab(MessageType.Autofill, hme);
+    return typeof filledCount === 'number' && filledCount > 0;
+  } catch {
+    return false;
+  }
+};
+
+const useTabHost = (): string => {
+  const [tabHost, setTabHost] = useState('');
+
+  useEffect(() => {
+    browser.tabs
+      .query({ active: true, lastFocusedWindow: true })
+      .then(([tab]) => {
+        if (tab?.url !== undefined) {
+          setTabHost(new URL(tab.url).hostname);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  return tabHost;
+};
+
+const useHmeList = (
+  client: ICloudClient
+): [
+  ListHmeResult | undefined,
+  string | undefined,
+  Dispatch<SetStateAction<ListHmeResult | undefined>>
+] => {
+  const [list, setList] = useState<ListHmeResult>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    new PremiumMailSettings(client)
+      .listHme()
+      .then((result) =>
+        setList({
+          ...result,
+          hmeEmails: [...result.hmeEmails].sort(
+            (a, b) => b.createTimestamp - a.createTimestamp
+          ),
+        })
+      )
+      .catch((e) => setError(errorMessage(e)));
+  }, [client]);
+
+  return [list, error, setList];
+};
+
+const useCopy = (): [boolean, (text: string) => Promise<void>] => {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timeout = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timeout);
+  }, [copied]);
+
+  const copy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+  };
+
+  return [copied, copy];
+};
+
+const MuteSiteButton = (props: { host: string }) => {
+  const [mutedSites, setMutedSites] = useBrowserStorageState(
+    'mutedSites',
+    DEFAULT_STORE.mutedSites
+  );
+
+  if (!props.host) {
+    return null;
+  }
+
+  const isMuted = mutedSites.includes(props.host);
+
   return (
     <button
-      className="text-sky-400 hover:text-sky-500 focus:outline-sky-400"
-      {...props}
+      type="button"
+      className="hover:text-ink"
+      aria-pressed={isMuted}
+      onClick={() =>
+        setMutedSites((prev) =>
+          prev.includes(props.host)
+            ? prev.filter((site) => site !== props.host)
+            : [...prev, props.host]
+        )
+      }
     >
-      <FontAwesomeIcon icon={props.icon} className="mr-1" />
-      {props.label}
+      {isMuted ? 'Suggest on this site again' : "Don't suggest on this site"}
     </button>
   );
 };
@@ -213,8 +240,8 @@ const SignOutButton = (props: {
   client: ICloudClient;
 }) => {
   return (
-    <FooterButton
-      className="text-sky-400 hover:text-sky-500 focus:outline-sky-400"
+    <TextButton
+      icon={LogOut}
       onClick={async () => {
         await props.client.signOut();
         // TODO: call the react state setter instead
@@ -222,532 +249,791 @@ const SignOutButton = (props: {
         performDeauthSideEffects();
         props.callback('SIGN_OUT');
       }}
-      label="Sign out"
-      icon={faSignOut}
-    />
+    >
+      Sign out
+    </TextButton>
   );
 };
+
+const SignInInstructions = (props: {
+  onSignedIn: (client: ICloudClient) => void;
+}) => {
+  const [check, setCheck] = useState<'idle' | 'checking' | 'signed-out'>(
+    'idle'
+  );
+
+  const onCheckAgainClick = async () => {
+    setCheck('checking');
+    for (const setupUrl of [DEFAULT_SETUP_URL, CN_SETUP_URL] as const) {
+      const client = new ICloudClient(setupUrl);
+      if (await client.isAuthenticated()) {
+        props.onSignedIn(client);
+        return;
+      }
+    }
+    setCheck('signed-out');
+  };
+
+  const checkAgainCopy = {
+    idle: 'Already signed in? Check again',
+    checking: 'Checking…',
+    'signed-out': 'Still signed out. Check again',
+  }[check];
+
+  return (
+    <Screen>
+      <Header>
+        <Eyebrow
+          left="Not signed in"
+          right={
+            <button
+              type="button"
+              className="hover:text-ink"
+              onClick={openUserguide}
+            >
+              Quickstart guide
+            </button>
+          }
+        />
+        <Headline>Sign in to iCloud, then come back here.</Headline>
+      </Header>
+      <Record>
+        <RecordRow label="Step 1">Open icloud.com and sign in</RecordRow>
+        <RecordRow label="Step 2">Finish two-factor authentication</RecordRow>
+        <RecordRow label="Step 3">Choose Trust This Browser</RecordRow>
+        {isFirefox && (
+          <RecordRow label="Containers">
+            Sign in from a tab outside any container
+          </RecordRow>
+        )}
+        <RecordRow label="Tip" muted>
+          Tick Keep me signed in so this lasts
+        </RecordRow>
+      </Record>
+      <Actions>
+        <PrimaryButton onClick={openICloud}>Open icloud.com</PrimaryButton>
+        <TextButton
+          arrow={check !== 'checking'}
+          disabled={check === 'checking'}
+          onClick={onCheckAgainClick}
+        >
+          {checkAgainCopy}
+        </TextButton>
+      </Actions>
+      <Footer
+        left={
+          <TextButton icon={BookOpen} onClick={openUserguide}>
+            Quickstart guide
+          </TextButton>
+        }
+        right={
+          <TextButton icon={Settings} onClick={openOptions}>
+            Settings
+          </TextButton>
+        }
+      />
+    </Screen>
+  );
+};
+
+const MetadataRows = (props: {
+  hme: HmeEmail;
+  client: ICloudClient;
+  onChange: (hme: HmeEmail) => void;
+  onError: (error: string) => void;
+}) => {
+  const { hme, client, onChange, onError } = props;
+
+  const save = async (patch: Partial<Pick<HmeEmail, 'label' | 'note'>>) => {
+    const updated = { ...hme, ...patch };
+    if (!updated.label) {
+      return;
+    }
+    onChange(updated);
+    try {
+      await new PremiumMailSettings(client).updateHmeMetadata(
+        updated.anonymousId,
+        updated.label,
+        updated.note
+      );
+    } catch (e) {
+      onChange(hme);
+      onError(errorMessage(e));
+    }
+  };
+
+  return (
+    <>
+      <EditableRecordRow
+        label="Title"
+        mono
+        value={hme.label}
+        onCommit={(label) => save({ label })}
+      />
+      <RecordRow label="Forwards to">{hme.forwardToEmail}</RecordRow>
+      <EditableRecordRow
+        label="Note"
+        value={hme.note || ''}
+        placeholder="Add a note"
+        onCommit={(note) => save({ note })}
+      />
+    </>
+  );
+};
+
+const ErrorHint = (props: { children?: string }) =>
+  props.children ? (
+    <p role="alert" className="text-[12px] text-ink">
+      {props.children}
+    </p>
+  ) : null;
+
+type Draft =
+  | { status: 'generating' }
+  | { status: 'ready'; hme: string }
+  | { status: 'creating'; hme: string }
+  | { status: 'failed'; error: string; hme?: string }
+  | { status: 'created'; hme: HmeEmail; filled: boolean };
 
 const HmeGenerator = (props: {
   callback: TransitionCallback<AuthenticatedAction>;
   client: ICloudClient;
 }) => {
-  const [hmeEmail, setHmeEmail] = useState<string>();
-  const [hmeError, setHmeError] = useState<string>();
-
-  const [reservedHme, setReservedHme] = useState<HmeEmail>();
-  const [reserveError, setReserveError] = useState<string>();
-
-  const [isEmailRefreshSubmitting, setIsEmailRefreshSubmitting] =
-    useState(false);
-  const [isUseSubmitting, setIsUseSubmitting] = useState(false);
-  const [tabHost, setTabHost] = useState('');
-  const [fwdToEmail, setFwdToEmail] = useState<string>();
-
+  const { client, callback } = props;
+  const tabHost = useTabHost();
+  const [list] = useHmeList(client);
+  const [draft, setDraft] = useState<Draft>({ status: 'generating' });
+  const [view, setView] = useState<'draft' | 'saved'>('draft');
+  const [title, setTitle] = useState<string>();
   const [note, setNote] = useState<string>();
-  const [label, setLabel] = useState<string>();
+  const [copied, copy] = useCopy();
+  const [metadataError, setMetadataError] = useState<string>();
 
-  useEffect(() => {
-    const fetchHmeList = async () => {
-      setHmeError(undefined);
-      try {
-        const pms = new PremiumMailSettings(props.client);
-        const result = await pms.listHme();
-        setFwdToEmail(result.selectedForwardTo);
-      } catch (e) {
-        setHmeError(e.toString());
-      }
-    };
+  const label = title ?? tabHost;
+  const noteValue = note ?? (tabHost ? `Used on ${tabHost}` : '');
+  const savedForSite =
+    list?.hmeEmails.filter((hme) => isSavedForSite(hme, tabHost)) ?? [];
 
-    fetchHmeList();
-  }, [props.client]);
-
-  useEffect(() => {
-    const fetchHmeEmail = async () => {
-      setHmeError(undefined);
-      setIsEmailRefreshSubmitting(true);
-      try {
-        const pms = new PremiumMailSettings(props.client);
-        setHmeEmail(await pms.generateHme());
-      } catch (e) {
-        setHmeError(e.toString());
-      } finally {
-        setIsEmailRefreshSubmitting(false);
-      }
-    };
-
-    fetchHmeEmail();
-  }, [props.client]);
-
-  useEffect(() => {
-    const getTabHost = async () => {
-      const [tab] = await browser.tabs.query({
-        active: true,
-        lastFocusedWindow: true,
-      });
-      const tabUrl = tab?.url;
-      if (tabUrl !== undefined) {
-        const { hostname } = new URL(tabUrl);
-        setTabHost(hostname);
-        setLabel(hostname);
-      }
-    };
-
-    getTabHost().catch(console.error);
-  }, []);
-
-  const onEmailRefreshClick = async () => {
-    setIsEmailRefreshSubmitting(true);
-    setReservedHme(undefined);
-    setHmeError(undefined);
-    setReserveError(undefined);
+  const generate = useCallback(async () => {
+    setDraft({ status: 'generating' });
     try {
-      const pms = new PremiumMailSettings(props.client);
-      setHmeEmail(await pms.generateHme());
+      const hme = await new PremiumMailSettings(client).generateHme();
+      setDraft({ status: 'ready', hme });
     } catch (e) {
-      setHmeError(e.toString());
+      setDraft({ status: 'failed', error: errorMessage(e) });
     }
-    setIsEmailRefreshSubmitting(false);
+  }, [client]);
+
+  useEffect(() => {
+    generate();
+  }, [generate]);
+
+  const create = async (hme: string) => {
+    setDraft({ status: 'creating', hme });
+    try {
+      const reserved = await new PremiumMailSettings(client).reserveHme(
+        hme,
+        label || hme,
+        noteValue || undefined
+      );
+      const filled = await fillOnPage(reserved.hme);
+      setDraft({ status: 'created', hme: reserved, filled });
+    } catch (e) {
+      setDraft({ status: 'failed', error: errorMessage(e), hme });
+    }
   };
 
-  const onUseSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsUseSubmitting(true);
-    setReservedHme(undefined);
-    setReserveError(undefined);
+  const createAnother = () => {
+    setTitle(undefined);
+    setNote(undefined);
+    setMetadataError(undefined);
+    generate();
+  };
 
-    if (hmeEmail !== undefined) {
-      try {
-        const pms = new PremiumMailSettings(props.client);
-        setReservedHme(
-          await pms.reserveHme(hmeEmail, label || tabHost, note || undefined)
-        );
-        setLabel(undefined);
-        setNote(undefined);
-      } catch (e) {
-        setReserveError(e.toString());
+  const footer = (
+    <Footer
+      left={
+        <TextButton icon={List} onClick={() => callback('MANAGE')}>
+          Manage addresses
+        </TextButton>
       }
-    }
-    setIsUseSubmitting(false);
-  };
+      right={<SignOutButton {...props} />}
+    />
+  );
 
-  const isReservationFormDisabled =
-    isEmailRefreshSubmitting || hmeEmail == reservedHme?.hme;
-
-  const reservationFormInputClassName =
-    'appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-400 text-gray-900 focus:outline-hidden focus:border-sky-400 focus:z-10 sm:text-sm';
-
-  return (
-    <TitledComponent
-      title="Hide My Email"
-      subtitle={`Create an address for '${tabHost}'`}
-    >
-      <div className="text-center space-y-1">
-        <div>
-          <span className="text-2xl">
-            <button className="mr-2" onClick={onEmailRefreshClick}>
-              <FontAwesomeIcon
-                className="text-sky-400 hover:text-sky-500 align-text-bottom"
-                icon={faRefresh}
-                spin={isEmailRefreshSubmitting}
-              />
-            </button>
-            {hmeEmail}
-          </span>
-          {fwdToEmail !== undefined && (
-            <p className="text-gray-400">Forward to: {fwdToEmail}</p>
-          )}
-        </div>
-        {hmeError && <ErrorMessage>{hmeError}</ErrorMessage>}
-      </div>
-      {hmeEmail && (
-        <div className="space-y-3">
-          <form
-            className={`space-y-3 ${
-              isReservationFormDisabled ? 'opacity-70' : ''
-            }`}
-            onSubmit={onUseSubmit}
-          >
-            <div>
-              <label htmlFor="label" className="block font-medium">
-                Label
-              </label>
-              <input
-                id="label"
-                placeholder={tabHost}
-                required
-                value={label || ''}
-                onChange={(e) => setLabel(e.target.value)}
-                className={reservationFormInputClassName}
-                disabled={isReservationFormDisabled}
-              />
-            </div>
-            <div>
-              <label htmlFor="note" className="block font-medium">
-                Note
-              </label>
-              <textarea
-                id="note"
-                rows={1}
-                className={reservationFormInputClassName}
-                placeholder="Make a note (optional)"
-                value={note || ''}
-                onChange={(e) => setNote(e.target.value)}
-                disabled={isReservationFormDisabled}
-              ></textarea>
-            </div>
-            <LoadingButton
-              loading={isUseSubmitting}
-              disabled={isReservationFormDisabled}
-            >
-              Use
-            </LoadingButton>
-            {reserveError && <ErrorMessage>{reserveError}</ErrorMessage>}
-          </form>
-          {reservedHme && <ReservationResult hme={reservedHme} />}
-        </div>
-      )}
-      <div className="grid grid-cols-2">
-        <div>
-          <FooterButton
-            onClick={() => props.callback('MANAGE')}
-            icon={faList}
-            label="Manage emails"
+  if (view === 'saved') {
+    return (
+      <Screen>
+        <Header>
+          <Eyebrow
+            left={`Saved for ${tabHost}`}
+            right={
+              <button
+                type="button"
+                className="hover:text-ink"
+                onClick={() => setView('draft')}
+              >
+                Back
+              </button>
+            }
           />
-        </div>
-        <div className="text-right">
-          <SignOutButton {...props} />
-        </div>
-      </div>
-    </TitledComponent>
-  );
-};
-
-const HmeDetails = (props: {
-  hme: HmeEmail;
-  client: ICloudClient;
-  activationCallback: () => void;
-  deletionCallback: () => void;
-}) => {
-  const [isActivateSubmitting, setIsActivateSubmitting] = useState(false);
-  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
-
-  const [error, setError] = useState<string>();
-
-  // Reset the error and the loaders when a new HME prop is passed to this component
-  useEffect(() => {
-    setError(undefined);
-    setIsActivateSubmitting(false);
-    setIsDeleteSubmitting(false);
-  }, [props.hme]);
-
-  const onActivationClick = async () => {
-    setIsActivateSubmitting(true);
-    try {
-      const pms = new PremiumMailSettings(props.client);
-      if (props.hme.isActive) {
-        await pms.deactivateHme(props.hme.anonymousId);
-      } else {
-        await pms.reactivateHme(props.hme.anonymousId);
-      }
-      props.activationCallback();
-    } catch (e) {
-      setError(e.toString());
-    } finally {
-      setIsActivateSubmitting(false);
-    }
-  };
-
-  const onDeletionClick = async () => {
-    setIsDeleteSubmitting(true);
-    try {
-      const pms = new PremiumMailSettings(props.client);
-      await pms.deleteHme(props.hme.anonymousId);
-      props.deletionCallback();
-    } catch (e) {
-      setError(e.toString());
-    } finally {
-      setIsDeleteSubmitting(false);
-    }
-  };
-
-  const onCopyClick = async () => {
-    await navigator.clipboard.writeText(props.hme.hme);
-  };
-
-  const onAutofillClick = async () => {
-    await sendMessageToTab(MessageType.Autofill, props.hme.hme);
-  };
-
-  const btnClassName =
-    'w-full justify-center text-white focus:ring-4 focus:outline-hidden font-medium rounded-lg px-2 py-3 text-center inline-flex items-center';
-  const labelClassName = 'font-bold';
-  const valueClassName = 'text-gray-500 truncate';
-
-  return (
-    <div className="space-y-2">
-      <div>
-        <p className={labelClassName}>Email</p>
-        <p title={props.hme.hme} className={valueClassName}>
-          {props.hme.isActive || (
-            <FontAwesomeIcon
-              title="Deactivated"
-              icon={faBan}
-              className="text-red-500 mr-1"
+          <Headline>Fill in one you already use here.</Headline>
+        </Header>
+        <div className="flex flex-col w-full">
+          <Rule />
+          {savedForSite.map((hme) => (
+            <ListRow
+              key={hme.anonymousId}
+              title={hme.hme}
+              meta={`${hme.note || hme.label} · ${formatDay(
+                hme.createTimestamp
+              )}`}
+              onClick={async () => {
+                if (await fillOnPage(hme.hme)) {
+                  window.close();
+                } else {
+                  await copy(hme.hme);
+                }
+              }}
             />
-          )}
-          {props.hme.hme}
-        </p>
-      </div>
-      <div>
-        <p className={labelClassName}>Label</p>
-        <p title={props.hme.label} className={valueClassName}>
-          {props.hme.label}
-        </p>
-      </div>
-      <div>
-        <p className={labelClassName}>Forward To</p>
-        <p title={props.hme.forwardToEmail} className={valueClassName}>
-          {props.hme.forwardToEmail}
-        </p>
-      </div>
-      <div>
-        <p className={labelClassName}>Created at</p>
-        <p className={valueClassName}>
-          {new Date(props.hme.createTimestamp).toLocaleString()}
-        </p>
-      </div>
-      {props.hme.note && (
-        <div>
-          <p className={labelClassName}>Note</p>
-          <p title={props.hme.note} className={valueClassName}>
-            {props.hme.note}
-          </p>
+          ))}
         </div>
-      )}
-      {error && <ErrorMessage>{error}</ErrorMessage>}
-      <div className="grid grid-cols-3 gap-2">
-        <button
-          title="Copy"
-          className={`${btnClassName} bg-sky-400 hover:bg-sky-500 focus:ring-blue-300`}
-          onClick={onCopyClick}
-        >
-          <FontAwesomeIcon icon={faClipboard} />
-        </button>
-        <button
-          title="Autofill"
-          className={`${btnClassName} bg-sky-400 hover:bg-sky-500 focus:ring-blue-300`}
-          onClick={onAutofillClick}
-        >
-          <FontAwesomeIcon icon={faCheck} />
-        </button>
-        <LoadingButton
-          title={props.hme.isActive ? 'Deactivate' : 'Reactivate'}
-          className={`${btnClassName} ${
-            props.hme.isActive
-              ? 'bg-red-500 hover:bg-red-600 focus:ring-red-300'
-              : 'bg-sky-400 hover:bg-sky-500 focus:ring-blue-300'
-          }`}
-          onClick={onActivationClick}
-          loading={isActivateSubmitting}
-        >
-          <FontAwesomeIcon icon={props.hme.isActive ? faBan : faRefresh} />
-        </LoadingButton>
-        {!props.hme.isActive && (
-          <LoadingButton
-            title="Delete"
-            className={`${btnClassName} bg-red-500 hover:bg-red-600 focus:ring-red-300 col-span-3`}
-            onClick={onDeletionClick}
-            loading={isDeleteSubmitting}
-          >
-            <FontAwesomeIcon icon={faTrashAlt} className="mr-1" /> Delete
-          </LoadingButton>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const searchHmeEmails = (
-  searchPrompt: string,
-  hmeEmails: HmeEmail[]
-): HmeEmail[] | undefined => {
-  if (!searchPrompt) {
-    return undefined;
+        <Actions>
+          <PrimaryButton onClick={() => setView('draft')}>
+            Create a new address instead
+          </PrimaryButton>
+          <Hint>
+            {copied
+              ? 'No email field on this page. Address copied instead.'
+              : 'Tap an address to fill it in on this page.'}
+          </Hint>
+        </Actions>
+        {footer}
+      </Screen>
+    );
   }
 
-  const searchEngine = new Fuse(hmeEmails, {
-    keys: ['label', 'hme'],
-    threshold: 0.4,
-  });
-  const searchResults = searchEngine.search(searchPrompt);
-  return searchResults.map((result) => result.item);
+  if (draft.status === 'failed') {
+    return (
+      <Screen>
+        <Header>
+          <Eyebrow
+            left="Couldn't create an address"
+            right={<MuteSiteButton host={tabHost} />}
+          />
+          <Headline>iCloud didn&apos;t answer. Nothing was created.</Headline>
+        </Header>
+        <Record>
+          <RecordRow label="Reason" mono>
+            {draft.error}
+          </RecordRow>
+          {list && (
+            <RecordRow label="Forwards to">{list.selectedForwardTo}</RecordRow>
+          )}
+          <RecordRow label="Title" mono>
+            {label}
+          </RecordRow>
+        </Record>
+        <Actions>
+          <PrimaryButton
+            onClick={() =>
+              draft.hme !== undefined ? create(draft.hme) : generate()
+            }
+          >
+            Try again
+          </PrimaryButton>
+          <TextLink href={ICLOUD_URL} arrow>
+            Open icloud.com to check your session
+          </TextLink>
+        </Actions>
+        {footer}
+      </Screen>
+    );
+  }
+
+  if (draft.status === 'created') {
+    const { hme, filled } = draft;
+    return (
+      <Screen>
+        <Header>
+          <Eyebrow
+            left={
+              <span className="flex items-center gap-1.5 text-ink">
+                <Icon icon={Check} />
+                {filled ? 'Created and filled in' : 'Created'}
+              </span>
+            }
+            right="Just now"
+          />
+          <Address
+            action={
+              <IconButton
+                icon={copied ? Check : Copy}
+                aria-label="Copy address"
+                onClick={() => copy(hme.hme)}
+              />
+            }
+          >
+            {hme.hme}
+          </Address>
+        </Header>
+        <Record>
+          <MetadataRows
+            hme={hme}
+            client={client}
+            onChange={(updated) => setDraft({ ...draft, hme: updated })}
+            onError={setMetadataError}
+          />
+        </Record>
+        <Actions>
+          <SecondaryButton
+            icon={copied ? Check : Copy}
+            onClick={() => copy(hme.hme)}
+          >
+            {copied ? 'Copied' : 'Copy address'}
+          </SecondaryButton>
+          {!filled && (
+            <Hint>No email field on this page. Copy the address instead.</Hint>
+          )}
+          <ErrorHint>{metadataError}</ErrorHint>
+          <TextButton arrow onClick={createAnother}>
+            Create another for this site
+          </TextButton>
+        </Actions>
+        {footer}
+      </Screen>
+    );
+  }
+
+  const isGenerating = draft.status === 'generating';
+  const isCreating = draft.status === 'creating';
+
+  return (
+    <Screen>
+      <Header>
+        <Eyebrow
+          left="You're about to create"
+          right={<MuteSiteButton host={tabHost} />}
+        />
+        <Address
+          action={
+            <IconButton
+              icon={RefreshCw}
+              spin={isGenerating}
+              disabled={isGenerating || isCreating}
+              aria-label="Generate a different address"
+              onClick={generate}
+            />
+          }
+        >
+          {isGenerating ? (
+            <span className="block w-[264px] h-3.5 rounded bg-wash animate-pulse" />
+          ) : (
+            draft.hme
+          )}
+        </Address>
+      </Header>
+      <Record>
+        <EditableRecordRow
+          label="Title"
+          mono
+          value={label}
+          placeholder="Title"
+          disabled={isCreating}
+          onCommit={(value) => setTitle(value || tabHost)}
+        />
+        <RecordRow label="Forwards to" muted={!list}>
+          {list?.selectedForwardTo ?? '…'}
+        </RecordRow>
+        <EditableRecordRow
+          label="Note"
+          value={noteValue}
+          placeholder="Add a note"
+          disabled={isCreating}
+          onCommit={setNote}
+        />
+      </Record>
+      <Actions>
+        {isGenerating ? (
+          <PrimaryButton disabled>Asking iCloud for an address…</PrimaryButton>
+        ) : (
+          <PrimaryButton loading={isCreating} onClick={() => create(draft.hme)}>
+            {isCreating ? 'Creating…' : 'Create and fill'}
+          </PrimaryButton>
+        )}
+        {savedForSite.length > 0 && (
+          <TextButton arrow onClick={() => setView('saved')}>
+            {savedForSite.length === 1
+              ? 'Or use the address saved for this site'
+              : `Or use one of ${savedForSite.length} addresses saved for this site`}
+          </TextButton>
+        )}
+      </Actions>
+      {footer}
+    </Screen>
+  );
 };
+
+const HmeDetail = (props: {
+  hme: HmeEmail;
+  client: ICloudClient;
+  onBack: () => void;
+  onChange: (hme: HmeEmail) => void;
+  onDelete: () => void;
+  signOut: ReactElement;
+}) => {
+  const { hme, client } = props;
+  const [busy, setBusy] = useState<'activation' | 'deletion'>();
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [error, setError] = useState<string>();
+  const [copied, copy] = useCopy();
+
+  const toggleActivation = async () => {
+    setBusy('activation');
+    setError(undefined);
+    try {
+      const pms = new PremiumMailSettings(client);
+      if (hme.isActive) {
+        await pms.deactivateHme(hme.anonymousId);
+      } else {
+        await pms.reactivateHme(hme.anonymousId);
+      }
+      props.onChange({ ...hme, isActive: !hme.isActive });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const onDeleteClick = async () => {
+    if (!isConfirmingDelete) {
+      setIsConfirmingDelete(true);
+      return;
+    }
+    setBusy('deletion');
+    setError(undefined);
+    try {
+      await new PremiumMailSettings(client).deleteHme(hme.anonymousId);
+      props.onDelete();
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(undefined);
+    }
+  };
+
+  const onFillClick = async () => {
+    if (await fillOnPage(hme.hme)) {
+      window.close();
+    } else {
+      setError('No email field on this page.');
+    }
+  };
+
+  return (
+    <Screen>
+      <Header>
+        <Eyebrow
+          left={`Address · ${hme.isActive ? 'Active' : 'Deactivated'}`}
+          right={
+            <button
+              type="button"
+              className="hover:text-ink"
+              onClick={props.onBack}
+            >
+              Back
+            </button>
+          }
+        />
+        <Address
+          small
+          muted={!hme.isActive}
+          action={
+            <IconButton
+              icon={copied ? Check : Copy}
+              aria-label="Copy address"
+              onClick={() => copy(hme.hme)}
+            />
+          }
+        >
+          {hme.hme}
+        </Address>
+      </Header>
+      <Record>
+        <MetadataRows
+          hme={hme}
+          client={client}
+          onChange={props.onChange}
+          onError={setError}
+        />
+        <RecordRow label="Created" muted>
+          {formatDateTime(hme.createTimestamp)}
+        </RecordRow>
+        <RecordRow
+          label="Status"
+          trailing={
+            <button
+              type="button"
+              aria-label={hme.isActive ? 'Deactivate' : 'Reactivate'}
+              title={hme.isActive ? 'Deactivate' : 'Reactivate'}
+              className="text-faint hover:text-ink disabled:cursor-not-allowed"
+              disabled={busy !== undefined}
+              onClick={toggleActivation}
+            >
+              <Icon icon={Power} />
+            </button>
+          }
+        >
+          {hme.isActive
+            ? 'Active · receiving mail'
+            : 'Deactivated · mail is rejected'}
+        </RecordRow>
+      </Record>
+      <Actions>
+        {hme.isActive ? (
+          <>
+            <PrimaryButton onClick={onFillClick}>
+              Fill in on this page
+            </PrimaryButton>
+            <TextButton
+              arrow={busy !== 'activation'}
+              disabled={busy !== undefined}
+              onClick={toggleActivation}
+            >
+              {busy === 'activation'
+                ? 'Deactivating…'
+                : 'Deactivate this address'}
+            </TextButton>
+          </>
+        ) : (
+          <>
+            <PrimaryButton
+              loading={busy === 'activation'}
+              disabled={busy !== undefined}
+              onClick={toggleActivation}
+            >
+              Reactivate
+            </PrimaryButton>
+            <SecondaryButton
+              icon={Trash2}
+              loading={busy === 'deletion'}
+              disabled={busy !== undefined}
+              onClick={onDeleteClick}
+              onBlur={() => setIsConfirmingDelete(false)}
+            >
+              {isConfirmingDelete ? 'Click again to delete' : 'Delete address'}
+            </SecondaryButton>
+          </>
+        )}
+        <ErrorHint>{error}</ErrorHint>
+      </Actions>
+      <Footer
+        left={
+          <TextButton icon={List} onClick={props.onBack}>
+            Manage addresses
+          </TextButton>
+        }
+        right={props.signOut}
+      />
+    </Screen>
+  );
+};
+
+const searchHmeEmails = (query: string, hmeEmails: HmeEmail[]): HmeEmail[] =>
+  new Fuse(hmeEmails, { keys: ['label', 'hme', 'note'], threshold: 0.4 })
+    .search(query)
+    .map((result) => result.item);
 
 const HmeManager = (props: {
   callback: TransitionCallback<AuthenticatedAndManagingAction>;
   client: ICloudClient;
 }) => {
-  const [fetchedHmeEmails, setFetchedHmeEmails] = useState<HmeEmail[]>();
-  const [hmeEmailsError, setHmeEmailsError] = useState<string>();
-  const [isFetching, setIsFetching] = useState(true);
-  const [selectedHmeIdx, setSelectedHmeIdx] = useState(0);
-  const [searchPrompt, setSearchPrompt] = useState<string>();
+  const { client, callback } = props;
+  const tabHost = useTabHost();
+  const [list, listError, setList] = useHmeList(client);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [query, setQuery] = useState('');
+  const [showAll, setShowAll] = useState(false);
 
-  useEffect(() => {
-    const fetchHmeList = async () => {
-      setHmeEmailsError(undefined);
-      setIsFetching(true);
-      try {
-        const pms = new PremiumMailSettings(props.client);
-        const result = await pms.listHme();
-        setFetchedHmeEmails(
-          result.hmeEmails.sort((a, b) => b.createTimestamp - a.createTimestamp)
-        );
-      } catch (e) {
-        setHmeEmailsError(e.toString());
-      } finally {
-        setIsFetching(false);
+  const signOut = <SignOutButton {...props} />;
+  const footer = (
+    <Footer
+      left={
+        <TextButton icon={Settings} onClick={openOptions}>
+          Settings
+        </TextButton>
       }
-    };
-
-    fetchHmeList();
-  }, [props.client]);
-
-  const activationCallbackFactory = (hmeEmail: HmeEmail) => () => {
-    const newHmeEmail = { ...hmeEmail, isActive: !hmeEmail.isActive };
-    setFetchedHmeEmails((prevFetchedHmeEmails) =>
-      prevFetchedHmeEmails?.map((item) =>
-        isEqual(item, hmeEmail) ? newHmeEmail : item
-      )
-    );
-  };
-
-  const deletionCallbackFactory = (hmeEmail: HmeEmail) => () => {
-    setFetchedHmeEmails((prevFetchedHmeEmails) =>
-      prevFetchedHmeEmails?.filter((item) => !isEqual(item, hmeEmail))
-    );
-  };
-
-  const hmeListGrid = (fetchedHmeEmails: HmeEmail[]) => {
-    const hmeEmails =
-      searchHmeEmails(searchPrompt || '', fetchedHmeEmails) || fetchedHmeEmails;
-
-    if (selectedHmeIdx >= hmeEmails.length) {
-      setSelectedHmeIdx(hmeEmails.length - 1);
-    }
-
-    const selectedHmeEmail = hmeEmails[selectedHmeIdx];
-
-    const searchBox = (
-      <div className="relative p-2 rounded-tl-md bg-gray-100">
-        <div className="absolute inset-y-0 flex items-center pl-3 pointer-events-none">
-          <FontAwesomeIcon className="text-gray-400" icon={faSearch} />
-        </div>
-        <input
-          type="search"
-          className="bg-[Canvas] pl-9 p-2 w-full rounded-sm placeholder-gray-400 border border-gray-200 focus:outline-hidden focus:border-sky-400"
-          placeholder="Search"
-          aria-label="Search through your HideMyEmail addresses"
-          onChange={(e) => {
-            setSearchPrompt(e.target.value);
-            setSelectedHmeIdx(0);
-          }}
-        />
-      </div>
-    );
-
-    const btnBaseClassName =
-      'p-2 w-full text-left border-b last:border-b-0 cursor-pointer truncate focus:outline-sky-400';
-    const btnClassName = `${btnBaseClassName} hover:bg-gray-100`;
-    const selectedBtnClassName = `${btnBaseClassName} text-white bg-sky-400 font-medium`;
-
-    const labelList = hmeEmails.map((hme, idx) => (
-      <button
-        key={idx}
-        aria-current={selectedHmeIdx === idx}
-        type="button"
-        className={idx === selectedHmeIdx ? selectedBtnClassName : btnClassName}
-        onClick={() => setSelectedHmeIdx(idx)}
-      >
-        {hme.isActive ? (
-          hme.label
-        ) : (
-          <div title="Deactivated">
-            <FontAwesomeIcon icon={faBan} className="text-red-500 mr-1" />
-            {hme.label}
-          </div>
-        )}
-      </button>
-    ));
-
-    const noSearchResult = (
-      <div className="p-3 wrap-break-word text-center text-gray-400">
-        No results for &quot;{searchPrompt}&quot;
-      </div>
-    );
-
-    return (
-      <div className="grid grid-cols-2" style={{ height: 398 }}>
-        <div className="overflow-y-auto text-sm rounded-l-md border border-gray-200">
-          <div className="sticky top-0 border-b">{searchBox}</div>
-          {hmeEmails.length === 0 && searchPrompt ? noSearchResult : labelList}
-        </div>
-        <div className="overflow-y-auto p-2 rounded-r-md border border-l-0 border-gray-200">
-          {selectedHmeEmail && (
-            <HmeDetails
-              client={props.client}
-              hme={selectedHmeEmail}
-              activationCallback={activationCallbackFactory(selectedHmeEmail)}
-              deletionCallback={deletionCallbackFactory(selectedHmeEmail)}
-            />
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const emptyState = (
-    <div className="text-center text-lg text-gray-400">
-      There are no emails to list
-    </div>
+      right={signOut}
+    />
   );
 
-  const resolveMainChildComponent = (): ReactNode => {
-    if (isFetching) {
-      return <Spinner />;
-    }
+  const hmeEmails = list?.hmeEmails ?? [];
+  const selected = hmeEmails.find((hme) => hme.anonymousId === selectedId);
 
-    if (hmeEmailsError) {
-      return <ErrorMessage>{hmeEmailsError}</ErrorMessage>;
-    }
+  const replaceHme = (updated: HmeEmail) =>
+    setList(
+      (prev) =>
+        prev && {
+          ...prev,
+          hmeEmails: prev.hmeEmails.map((hme) =>
+            hme.anonymousId === updated.anonymousId ? updated : hme
+          ),
+        }
+    );
 
-    if (!fetchedHmeEmails || fetchedHmeEmails.length === 0) {
-      return emptyState;
-    }
-
-    return hmeListGrid(fetchedHmeEmails);
+  const removeHme = (anonymousId: string) => {
+    setSelectedId(undefined);
+    setList(
+      (prev) =>
+        prev && {
+          ...prev,
+          hmeEmails: prev.hmeEmails.filter(
+            (hme) => hme.anonymousId !== anonymousId
+          ),
+        }
+    );
   };
 
-  return (
-    <TitledComponent
-      title="Hide My Email"
-      subtitle="Manage your HideMyEmail addresses"
-    >
-      {resolveMainChildComponent()}
-      <div className="grid grid-cols-2">
-        <div>
-          <FooterButton
-            onClick={() => props.callback('GENERATE')}
-            icon={faPlus}
-            label="Generate new email"
+  if (selected) {
+    return (
+      <HmeDetail
+        hme={selected}
+        client={client}
+        onBack={() => setSelectedId(undefined)}
+        onChange={replaceHme}
+        onDelete={() => removeHme(selected.anonymousId)}
+        signOut={signOut}
+      />
+    );
+  }
+
+  if (listError) {
+    return (
+      <Screen>
+        <Header>
+          <Eyebrow left="Addresses" />
+          <Headline>Couldn&apos;t load your addresses.</Headline>
+        </Header>
+        <Record>
+          <RecordRow label="Reason" mono>
+            {listError}
+          </RecordRow>
+        </Record>
+        {footer}
+      </Screen>
+    );
+  }
+
+  if (!list) {
+    return (
+      <Screen>
+        <Header>
+          <Eyebrow
+            left={
+              <>
+                <Spinner />
+                Loading addresses
+              </>
+            }
           />
-        </div>
-        <div className="text-right">
-          <SignOutButton {...props} />
-        </div>
+        </Header>
+        {footer}
+      </Screen>
+    );
+  }
+
+  const createLabel = tabHost ? `Create one for ${tabHost}` : 'Create one';
+
+  if (hmeEmails.length === 0) {
+    return (
+      <Screen>
+        <Header>
+          <Eyebrow left="0 addresses" />
+          <Headline>Nothing here yet.</Headline>
+        </Header>
+        <Record>
+          <RecordRow label="How">
+            Open any email field on a site and pick the suggestion, or use the
+            toolbar icon.
+          </RecordRow>
+          <RecordRow label="Forwards to">{list.selectedForwardTo}</RecordRow>
+        </Record>
+        <PrimaryButton onClick={() => callback('GENERATE')}>
+          {createLabel}
+        </PrimaryButton>
+        {footer}
+      </Screen>
+    );
+  }
+
+  const deactivatedCount = hmeEmails.filter((hme) => !hme.isActive).length;
+  const results = query ? searchHmeEmails(query, hmeEmails) : hmeEmails;
+  const isTruncated =
+    !query && !showAll && results.length > MANAGE_PREVIEW_SIZE;
+  const visible = isTruncated ? results.slice(0, MANAGE_PREVIEW_SIZE) : results;
+
+  return (
+    <Screen>
+      <Header>
+        <Eyebrow
+          left={[
+            `${hmeEmails.length} ${
+              hmeEmails.length === 1 ? 'address' : 'addresses'
+            }`,
+            deactivatedCount > 0 && `${deactivatedCount} deactivated`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          right={
+            <button
+              type="button"
+              className="hover:text-ink"
+              onClick={() => callback('GENERATE')}
+            >
+              Create for this site
+            </button>
+          }
+        />
+        <label className="flex items-center gap-2 px-2.5 py-[9px] border border-line rounded focus-within:border-ink">
+          <Icon icon={Search} className="text-faint" />
+          <input
+            type="search"
+            className="flex-1 min-w-0 bg-transparent outline-none text-[13px] placeholder:text-faint"
+            placeholder="Search addresses or sites"
+            aria-label="Search addresses or sites"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+      </Header>
+      <div className="flex flex-col w-full">
+        <Rule />
+        {visible.map((hme) => (
+          <ListRow
+            key={hme.anonymousId}
+            title={hme.hme}
+            muted={!hme.isActive}
+            meta={
+              hme.isActive
+                ? `${hme.label} · ${formatDay(hme.createTimestamp)}`
+                : `Deactivated · ${hme.label}`
+            }
+            onClick={() => setSelectedId(hme.anonymousId)}
+          />
+        ))}
+        {query && results.length === 0 && (
+          <p className="py-3 text-[13px] text-muted break-words">
+            No addresses match &quot;{query}&quot;.
+          </p>
+        )}
       </div>
-    </TitledComponent>
+      {isTruncated && (
+        <TextButton arrow onClick={() => setShowAll(true)}>
+          Show all {results.length}
+        </TextButton>
+      )}
+      {footer}
+    </Screen>
   );
 };
 
@@ -762,11 +1048,25 @@ const constructClient = (clientState: Store['clientState']): ICloudClient => {
 const transitionToNextStateElement = (
   state: PopupState,
   setState: Dispatch<PopupState>,
-  clientState: Store['clientState']
+  clientState: Store['clientState'],
+  setClientState: Dispatch<Store['clientState']>
 ): ReactElement => {
   switch (state) {
     case PopupState.SignedOut: {
-      return <SignInInstructions />;
+      const onSignedIn = (client: ICloudClient) => {
+        setClientState({
+          setupUrl: client.setupUrl,
+          webservices: client.webservices,
+        });
+        browser.contextMenus
+          .update(CONTEXT_MENU_ITEM_ID, {
+            title: SIGNED_IN_CTA_COPY,
+            enabled: true,
+          })
+          .catch(console.debug);
+        setState(STATE_MACHINE_TRANSITIONS[state].AUTHENTICATE);
+      };
+      return <SignInInstructions onSignedIn={onSignedIn} />;
     }
     case PopupState.Authenticated: {
       const callback = (action: AuthenticatedAction) =>
@@ -834,16 +1134,26 @@ const Popup = () => {
     isClientStateLoading,
   ]);
 
-  return (
-    <div className="min-h-full flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        {isStateLoading || !clientAuthStateSynced ? (
-          <Spinner />
-        ) : (
-          transitionToNextStateElement(state, setState, clientState)
-        )}
-      </div>
-    </div>
+  if (isStateLoading || !clientAuthStateSynced) {
+    return (
+      <Screen>
+        <Eyebrow
+          left={
+            <>
+              <Spinner />
+              Checking your iCloud session
+            </>
+          }
+        />
+      </Screen>
+    );
+  }
+
+  return transitionToNextStateElement(
+    state,
+    setState,
+    clientState,
+    setClientState
   );
 };
 

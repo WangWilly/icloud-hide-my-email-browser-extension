@@ -1,0 +1,30 @@
+@theme {
+  --font-sans: 'Public Sans Variable', system-ui, sans-serif;
+  --font-mono: 'Fragment Mono', ui-monospace, monospace;
+  --color-ink: #1a1a1a;
+  --color-muted: #666666;
+  --color-faint: #b3b3b3;
+  --color-line: #e5e5e5;
+  --color-wash: #f7f7f7;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-line);
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  body {
+    background-color: #ffffff;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+}

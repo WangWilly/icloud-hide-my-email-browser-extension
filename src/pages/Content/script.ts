@@ -10,11 +10,12 @@ import { v4 as uuidv4 } from 'uuid';
 import './index.css';
 import browser from 'webextension-polyfill';
 import { getBrowserStorageValue } from '../../storage';
+import { SIGNED_OUT_CTA_COPY } from '../Background/constants';
 
 const EMAIL_INPUT_QUERY_STRING =
   'input[type="email"], input[name="email"], input[id="email"]';
 
-const LOADING_COPY = 'Hide My Email — Loading...';
+const ICLOUD_URL = 'https://www.icloud.com';
 
 // A unique CSS class prefix is used to guarantee that the style injected
 // by the extension does not interfere with the existing style of
@@ -23,6 +24,72 @@ const STYLE_CLASS_PREFIX = 'd1691f0f-b8f0-495e-9ffb-fe4e6f84b518';
 
 const className = (shortName: string): string =>
   `${STYLE_CLASS_PREFIX}-${shortName}`;
+
+// Lucide icons (ISC license): loader, mail, log-in, circle-alert.
+const ICON_PATHS = {
+  loader:
+    '<path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>',
+  mail: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  logIn:
+    '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/>',
+  alert:
+    '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
+};
+
+type SuggestionState =
+  | { kind: 'loading' }
+  | { kind: 'ready'; hme: string }
+  | { kind: 'signed-out' }
+  | { kind: 'error'; message: string };
+
+const suggestionView = (
+  state: SuggestionState
+): { icon: keyof typeof ICON_PATHS; text: string; hint?: string } => {
+  switch (state.kind) {
+    case 'loading':
+      return { icon: 'loader', text: 'Hide My Email — asking iCloud…' };
+    case 'ready':
+      return { icon: 'mail', text: state.hme, hint: 'Click to fill' };
+    case 'signed-out':
+      return {
+        icon: 'logIn',
+        text: 'Sign in to iCloud to use Hide My Email',
+        hint: 'Open icloud.com',
+      };
+    case 'error':
+      return { icon: 'alert', text: state.message };
+  }
+};
+
+const renderSuggestion = (
+  btn: HTMLButtonElement,
+  state: SuggestionState
+): void => {
+  const view = suggestionView(state);
+
+  btn.dataset.state = state.kind;
+  btn.dataset.hme = state.kind === 'ready' ? state.hme : '';
+  btn.disabled = state.kind === 'loading' || state.kind === 'error';
+
+  const icon = document.createElement('span');
+  icon.className = className('icon');
+  icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${
+    ICON_PATHS[view.icon]
+  }</svg>`;
+
+  const text = document.createElement('span');
+  text.className = className('text');
+  text.textContent = view.text;
+
+  btn.replaceChildren(icon, text);
+
+  if (view.hint) {
+    const hint = document.createElement('span');
+    hint.className = className('hint');
+    hint.textContent = view.hint;
+    btn.append(hint);
+  }
+};
 
 type AutofillableInputElement = {
   inputElement: HTMLInputElement;
@@ -34,38 +101,6 @@ type AutofillableInputElement = {
   };
 };
 
-const disableButton = (
-  btn: HTMLButtonElement,
-  cursorClass: string,
-  copy: string
-): void => {
-  btn.innerHTML = copy;
-  btn.setAttribute('disabled', 'true');
-  btn.classList.remove(className('hover-button'));
-  btn.classList.forEach((name) => {
-    if (name.startsWith(className('cursor-'))) {
-      btn.classList.remove(name);
-    }
-  });
-  btn.classList.add(className(cursorClass));
-};
-
-const enableButton = (
-  btn: HTMLButtonElement,
-  cursorClass: string,
-  copy: string
-): void => {
-  btn.innerHTML = copy;
-  btn.removeAttribute('disabled');
-  btn.classList.add(className('hover-button'));
-  btn.classList.forEach((name) => {
-    if (name.startsWith(className('cursor-'))) {
-      btn.classList.remove(name);
-    }
-  });
-  btn.classList.add(className(cursorClass));
-};
-
 const makeButtonSupport = (
   inputElement: HTMLInputElement
 ): AutofillableInputElement['buttonSupport'] => {
@@ -75,10 +110,10 @@ const makeButtonSupport = (
   btnElement.setAttribute('type', 'button');
   btnElement.classList.add(className('button'));
 
-  disableButton(btnElement, 'cursor-not-allowed', LOADING_COPY);
+  renderSuggestion(btnElement, { kind: 'loading' });
 
   const inputOnFocusCallback = async () => {
-    disableButton(btnElement, 'cursor-progress', LOADING_COPY);
+    renderSuggestion(btnElement, { kind: 'loading' });
     inputElement.parentNode?.insertBefore(btnElement, inputElement.nextSibling);
 
     await browser.runtime.sendMessage({
@@ -90,7 +125,7 @@ const makeButtonSupport = (
   inputElement.addEventListener('focus', inputOnFocusCallback);
 
   const inputOnBlurCallback = () => {
-    disableButton(btnElement, 'cursor-not-allowed', LOADING_COPY);
+    renderSuggestion(btnElement, { kind: 'loading' });
     btnElement.remove();
   };
 
@@ -98,8 +133,18 @@ const makeButtonSupport = (
 
   const btnOnMousedownCallback = async (ev: MouseEvent) => {
     ev.preventDefault();
-    const hme = btnElement.innerHTML;
-    disableButton(btnElement, 'cursor-progress', LOADING_COPY);
+
+    if (btnElement.dataset.state === 'signed-out') {
+      window.open(ICLOUD_URL, '_blank', 'noopener');
+      return;
+    }
+
+    const hme = btnElement.dataset.hme;
+    if (btnElement.dataset.state !== 'ready' || !hme) {
+      return;
+    }
+
+    renderSuggestion(btnElement, { kind: 'loading' });
     await browser.runtime.sendMessage({
       type: MessageType.ReservationRequest,
       data: { hme, label: window.location.host, elementId: btnElement.id },
@@ -133,15 +178,18 @@ export default async function main(): Promise<void> {
   );
 
   const options = await getBrowserStorageValue('iCloudHmeOptions');
+  const mutedSites = (await getBrowserStorageValue('mutedSites')) ?? [];
+  const isButtonEnabled =
+    options?.autofill.button !== false &&
+    !mutedSites.includes(window.location.hostname);
 
   const makeAutofillableInputElement = (
     inputElement: HTMLInputElement
   ): AutofillableInputElement => ({
     inputElement,
-    buttonSupport:
-      options?.autofill.button === false
-        ? undefined
-        : makeButtonSupport(inputElement),
+    buttonSupport: isButtonEnabled
+      ? makeButtonSupport(inputElement)
+      : undefined,
   });
 
   const autofillableInputElements = Array.from(emailInputElements).map(
@@ -212,7 +260,7 @@ export default async function main(): Promise<void> {
             removeButtonSupport(inputElement, buttonSupport);
           }
         });
-        break;
+        return Promise.resolve(autofillableInputElements.length);
       case MessageType.GenerateResponse:
         {
           const { hme, elementId, error } =
@@ -225,7 +273,12 @@ export default async function main(): Promise<void> {
           }
 
           if (error) {
-            disableButton(element, 'cursor-not-allowed', error);
+            renderSuggestion(
+              element,
+              error === SIGNED_OUT_CTA_COPY
+                ? { kind: 'signed-out' }
+                : { kind: 'error', message: error }
+            );
             break;
           }
 
@@ -233,7 +286,7 @@ export default async function main(): Promise<void> {
             break;
           }
 
-          enableButton(element, 'cursor-pointer', hme);
+          renderSuggestion(element, { kind: 'ready', hme });
         }
         break;
       case MessageType.ReservationResponse:
@@ -248,7 +301,7 @@ export default async function main(): Promise<void> {
           }
 
           if (error) {
-            disableButton(btnElement, 'cursor-not-allowed', error);
+            renderSuggestion(btnElement, { kind: 'error', message: error });
             break;
           }
 

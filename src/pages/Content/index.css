@@ -1,31 +1,85 @@
-@reference "tailwindcss";
-
-/*
-  TailwindCSS v3 compatibility: https://tailwindcss.com/docs/upgrade-guide#buttons-use-the-default-cursor 
-*/
-@layer base {
-  button:not(:disabled),
-  [role='button']:not(:disabled) {
-    cursor: pointer;
+@keyframes d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
 .d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button {
-  @apply bg-sky-400 text-white w-full rounded p-2 my-1 font-sans font-medium;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 6px 0;
+  padding: 10px 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666666;
+  font: 400 13px/1.3 'Public Sans', system-ui, -apple-system, sans-serif;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  cursor: progress;
 }
 
-.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-hover-button {
-  @apply hover:bg-sky-500;
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='ready'] {
+  background: #1a1a1a;
+  color: #ffffff;
+  cursor: pointer;
 }
 
-.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-cursor-not-allowed {
-  @apply cursor-not-allowed;
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='ready']:hover {
+  background: #000000;
 }
 
-.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-cursor-progress {
-  @apply cursor-progress;
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='signed-out'] {
+  cursor: pointer;
 }
 
-.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-cursor-pointer {
-  @apply cursor-pointer;
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='error'] {
+  color: #1a1a1a;
+  cursor: not-allowed;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='loading']
+  .d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-icon
+  svg {
+  animation: d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-spin 1s linear infinite;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-text {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='ready']
+  .d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-text {
+  font-family: 'Fragment Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-hint {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #b3b3b3;
+  white-space: nowrap;
+}
+
+.d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-button[data-state='signed-out']
+  .d1691f0f-b8f0-495e-9ffb-fe4e6f84b518-hint {
+  color: #1a1a1a;
 }

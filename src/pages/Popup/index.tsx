@@ -2,6 +2,8 @@ import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import Popup from './Popup';
+import '@fontsource-variable/public-sans';
+import '@fontsource/fragment-mono';
 import './index.css';
 
 const container = document.getElementById('app-container') as HTMLElement;
