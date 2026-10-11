@@ -27,6 +27,7 @@ import {
   SIGNED_OUT_CTA_COPY,
 } from './constants';
 import { isFirefox } from '../../browserUtils';
+import { renewSession } from './session';
 
 const constructClient = async (): Promise<ICloudClient> => {
   const clientState = await getBrowserStorageValue('clientState');
@@ -81,37 +82,59 @@ const performAuthSideEffects = (
   }
 };
 
+// Resolves to a client with a live session, renewing an expired session the
+// extension was using before giving up and signing out. A session is only
+// renewed when one was stored, so icloud.com is never opened for someone who
+// has not signed in.
+const ensureAuthenticatedClient = async (): Promise<
+  ICloudClient | undefined
+> => {
+  const clientState = await getBrowserStorageValue('clientState');
+  const client = await constructClient();
+
+  if (await client.isAuthenticated()) {
+    if (clientState === undefined) {
+      performAuthSideEffects(client);
+    }
+    return client;
+  }
+
+  const renewedClient =
+    clientState && (await renewSession(clientState.setupUrl));
+  if (renewedClient) {
+    performAuthSideEffects(renewedClient);
+    return renewedClient;
+  }
+
+  performDeauthSideEffects();
+  return undefined;
+};
+
 // ===== Message handling =====
 
 browser.runtime.onMessage.addListener(async (uncastedMessage: unknown) => {
   const message = uncastedMessage as Message<unknown>;
 
   switch (message.type) {
+    case MessageType.RenewSessionRequest: {
+      const client = await ensureAuthenticatedClient();
+      return (
+        client && {
+          setupUrl: client.setupUrl,
+          webservices: client.webservices,
+        }
+      );
+    }
     case MessageType.GenerateRequest:
       {
-        const deauthCallback = async () => {
+        const elementId = message.data;
+
+        const client = await ensureAuthenticatedClient();
+        if (client === undefined) {
           await sendMessageToTab(MessageType.GenerateResponse, {
             error: SIGNED_OUT_CTA_COPY,
             elementId,
           });
-          performDeauthSideEffects();
-        };
-
-        const elementId = message.data;
-
-        const clientState = await getBrowserStorageValue('clientState');
-        if (clientState === undefined) {
-          await deauthCallback();
-          break;
-        }
-
-        const client = new ICloudClient(
-          clientState.setupUrl,
-          clientState.webservices
-        );
-        const isClientAuthenticated = await client.isAuthenticated();
-        if (!isClientAuthenticated) {
-          await deauthCallback();
           break;
         }
 
@@ -242,10 +265,9 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
   const serializedUrl = info.pageUrl || tab?.url;
   const hostname = serializedUrl ? new URL(serializedUrl).hostname : '';
 
-  const client = await constructClient();
-  const isClientAuthenticated = await client.isAuthenticated();
+  const client = await ensureAuthenticatedClient();
 
-  if (!isClientAuthenticated) {
+  if (client === undefined) {
     sendMessageToTab(
       MessageType.ActiveInputElementWrite,
       {
@@ -254,7 +276,6 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
       } as ActiveInputElementWriteData,
       tab
     );
-    performDeauthSideEffects();
     return;
   }
 
