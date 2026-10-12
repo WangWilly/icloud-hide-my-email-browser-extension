@@ -209,13 +209,13 @@ const buttonBase =
   'w-full h-11 shrink-0 inline-flex justify-center items-center gap-2 rounded-lg text-[15px] font-semibold disabled:cursor-not-allowed';
 
 export const PrimaryButton = (props: ButtonProps) => {
-  const { loading, icon, children, className = '', ...rest } = props;
+  const { loading, disabled, icon, children, className = '', ...rest } = props;
   return (
     <button
       type="button"
       className={`${buttonBase} bg-ink text-white hover:bg-black disabled:bg-wash disabled:text-muted ${className}`}
-      disabled={loading || rest.disabled}
       {...rest}
+      disabled={loading || disabled}
     >
       {loading ? <Spinner /> : icon && <Icon icon={icon} />}
       {children}
@@ -224,13 +224,13 @@ export const PrimaryButton = (props: ButtonProps) => {
 };
 
 export const SecondaryButton = (props: ButtonProps) => {
-  const { loading, icon, children, className = '', ...rest } = props;
+  const { loading, disabled, icon, children, className = '', ...rest } = props;
   return (
     <button
       type="button"
       className={`${buttonBase} border border-line text-ink hover:bg-wash ${className}`}
-      disabled={loading || rest.disabled}
       {...rest}
+      disabled={loading || disabled}
     >
       {loading ? <Spinner /> : icon && <Icon icon={icon} />}
       {children}
