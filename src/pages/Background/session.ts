@@ -21,10 +21,12 @@ const renewInBackgroundTab = async (
   setupUrl: ICloudClient['setupUrl']
 ): Promise<ICloudClient | undefined> => {
   const client = new ICloudClient(setupUrl);
-  const tab = await browser.tabs.create({
-    url: WEB_APP_URLS[setupUrl],
-    active: false,
-  });
+  const tab = await browser.tabs
+    .create({ url: WEB_APP_URLS[setupUrl], active: false })
+    .catch(console.debug);
+  if (!tab) {
+    return undefined;
+  }
 
   try {
     const deadline = Date.now() + TIMEOUT_MS;

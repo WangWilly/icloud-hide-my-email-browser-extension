@@ -1112,10 +1112,11 @@ const Popup = () => {
         return clientState;
       }
       setIsRenewingSession(true);
-      return (await browser.runtime.sendMessage({
-        type: MessageType.RenewSessionRequest,
-        data: undefined,
-      })) as Store['clientState'];
+      // A rejected renewal (e.g. the service worker was stopped mid-renewal)
+      // means the session could not be renewed, not an endless load.
+      return (await browser.runtime
+        .sendMessage({ type: MessageType.RenewSessionRequest, data: undefined })
+        .catch(console.debug)) as Store['clientState'];
     };
 
     const syncClientAuthState = async () => {
