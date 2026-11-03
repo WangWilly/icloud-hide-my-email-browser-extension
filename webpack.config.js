@@ -4,7 +4,6 @@ const webpack = require('webpack'),
   HtmlWebpackPlugin = require('html-webpack-plugin'),
   TerserPlugin = require('terser-webpack-plugin'),
   MiniCssExtractPlugin = require('mini-css-extract-plugin'),
-  { CleanWebpackPlugin } = require('clean-webpack-plugin'),
   ASSET_PATH = process.env.ASSET_PATH || '/',
   FIREFOX = process.env.FIREFOX === 'true';
 
@@ -111,7 +110,6 @@ const options = {
   },
   plugins: [
     new MiniCssExtractPlugin(),
-    new CleanWebpackPlugin({ verbose: false }),
     new webpack.ProgressPlugin(),
     // expose and write the allowed env vars on the compiled bundle
     new webpack.EnvironmentPlugin(['NODE_ENV']),
