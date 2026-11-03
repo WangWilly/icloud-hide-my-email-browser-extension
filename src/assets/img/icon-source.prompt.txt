@@ -1,0 +1,11 @@
+Generated with the built-in image_gen tool. Source: icon-source.png.
+Resize the source to 16, 32, 48, 120, and 128 px for the extension assets.
+
+Use case: logo-brand
+Asset type: production browser extension app icon for this project's iCloud Hide My Email email-alias privacy tool.
+Primary request: create one original minimal icon that communicates private email: one white envelope whose outer silhouette subtly becomes a protective shield at its lower center, with a single bold dark V-shaped envelope flap cut into the white mark. A unified envelope-shield symbol, not a collage of separate symbols.
+Style/medium: polished flat vector-like bitmap, geometric, exceptionally simple, crisp edges, uniform visual weight.
+Composition: square 1024x1024 canvas. A near-black charcoal (#191919) rounded-square tile occupies approximately 90% of the canvas, centered with equal transparent margins. A large centered white envelope-shield symbol occupies about 65% of the tile width. Thick features and open negative space so it remains recognizable at 16x16 and 32x32 pixels.
+Color palette: charcoal and white, matching the project's minimal monochrome interface.
+Background: actual transparency outside the rounded-square tile; opaque charcoal inside tile.
+Constraints: exactly one finished icon, front-facing, no mockup, no grid, no text, no letters, no watermark, no Apple logo, no cloud logo, no small lock or secondary badge, no shadows, no gradients, no texture, no 3D bevel. The envelope and shield must read as one simple unified mark.
