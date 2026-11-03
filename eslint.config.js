@@ -36,5 +36,8 @@ module.exports = [
         'import/resolver': { typescript: true, node: true },
       },
     },
-  ].map((config) => ({ ...config, files: ['**/*.ts', '**/*.tsx'] })),
+  ].map((config) => ({
+    ...config,
+    files: ['**/*.ts', '**/*.tsx', '**/*.mts'],
+  })),
 ];
