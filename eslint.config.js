@@ -32,6 +32,9 @@ module.exports = [
       languageOptions: {
         globals: { ...globals.node, ...globals.browser },
       },
+      settings: {
+        'import/resolver': { typescript: true, node: true },
+      },
     },
   ].map((config) => ({ ...config, files: ['**/*.ts', '**/*.tsx'] })),
 ];
