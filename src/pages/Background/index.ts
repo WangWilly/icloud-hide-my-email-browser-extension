@@ -112,75 +112,90 @@ const ensureAuthenticatedClient = async (): Promise<
 
 // ===== Message handling =====
 
-browser.runtime.onMessage.addListener(async (uncastedMessage: unknown) => {
-  const message = uncastedMessage as Message<unknown>;
+browser.runtime.onMessage.addListener(
+  async (uncastedMessage: unknown, sender: browser.Runtime.MessageSender) => {
+    const message = uncastedMessage as Message<unknown>;
 
-  switch (message.type) {
-    case MessageType.RenewSessionRequest: {
-      const client = await ensureAuthenticatedClient();
-      return (
-        client && {
-          setupUrl: client.setupUrl,
-          webservices: client.webservices,
-        }
-      );
-    }
-    case MessageType.GenerateRequest:
-      {
-        const elementId = message.data;
-
+    switch (message.type) {
+      case MessageType.RenewSessionRequest: {
         const client = await ensureAuthenticatedClient();
-        if (client === undefined) {
-          await sendMessageToTab(MessageType.GenerateResponse, {
-            error: SIGNED_OUT_CTA_COPY,
-            elementId,
-          });
-          break;
-        }
+        return (
+          client && {
+            setupUrl: client.setupUrl,
+            webservices: client.webservices,
+          }
+        );
+      }
+      case MessageType.GenerateRequest:
+        {
+          const tab = sender.tab;
+          if (tab?.id === undefined) {
+            break;
+          }
+          const elementId = message.data;
 
-        try {
-          const pms = new PremiumMailSettings(client);
-          const hme = await pms.generateHme();
-          await sendMessageToTab(MessageType.GenerateResponse, {
-            hme,
-            elementId,
-          });
-        } catch (e) {
-          await sendMessageToTab(MessageType.GenerateResponse, {
-            error: e.toString(),
-            elementId,
-          });
+          const client = await ensureAuthenticatedClient();
+          if (client === undefined) {
+            await sendMessageToTab(
+              MessageType.GenerateResponse,
+              { error: SIGNED_OUT_CTA_COPY, elementId },
+              tab
+            );
+            break;
+          }
+
+          try {
+            const pms = new PremiumMailSettings(client);
+            const hme = await pms.generateHme();
+            await sendMessageToTab(
+              MessageType.GenerateResponse,
+              { hme, elementId },
+              tab
+            );
+          } catch (e) {
+            await sendMessageToTab(
+              MessageType.GenerateResponse,
+              { error: e.toString(), elementId },
+              tab
+            );
+          }
         }
-      }
-      break;
-    case MessageType.ReservationRequest:
-      {
-        const { hme, label, elementId } =
-          message.data as ReservationRequestData;
-        const client = await constructClient();
-        // Given that the reservation step happens shortly after
-        // the generation step, it is safe to assume that the client's
-        // auth state has been recently validated. Hence, we are
-        // skipping token validation.
-        try {
-          const pms = new PremiumMailSettings(client);
-          await pms.reserveHme(hme, label);
-          await sendMessageToTab(MessageType.ReservationResponse, {
-            hme,
-            elementId,
-          });
-        } catch (e) {
-          await sendMessageToTab(MessageType.ReservationResponse, {
-            error: e.toString(),
-            elementId,
-          });
+        break;
+      case MessageType.ReservationRequest:
+        {
+          const tab = sender.tab;
+          if (tab?.id === undefined) {
+            break;
+          }
+          const { hme, label, elementId } =
+            message.data as ReservationRequestData;
+          const client = await constructClient();
+          // Given that the reservation step happens shortly after
+          // the generation step, it is safe to assume that the client's
+          // auth state has been recently validated. Hence, we are
+          // skipping token validation.
+          try {
+            const pms = new PremiumMailSettings(client);
+            await pms.reserveHme(hme, label);
+            await sendMessageToTab(
+              MessageType.ReservationResponse,
+              { hme, elementId },
+              tab
+            );
+          } catch (e) {
+            await sendMessageToTab(
+              MessageType.ReservationResponse,
+              { error: e.toString(), elementId },
+              tab
+            );
+          }
         }
-      }
-      break;
-    default:
-      break;
+        break;
+      default:
+        break;
+    }
   }
-});
+);
 
 // ===== Context menu =====
 
@@ -308,7 +323,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 browser.webRequest.onResponseStarted.addListener(
   async (details: browser.WebRequest.OnResponseStartedDetailsType) => {
     const { statusCode, url } = details;
-    if (statusCode < 200 && statusCode > 299) {
+    if (statusCode < 200 || statusCode > 299) {
       console.debug('Request failed', details);
       return;
     }
@@ -334,7 +349,7 @@ browser.webRequest.onResponseStarted.addListener(
 browser.webRequest.onResponseStarted.addListener(
   async (details: browser.WebRequest.OnResponseStartedDetailsType) => {
     const { statusCode } = details;
-    if (statusCode < 200 && statusCode > 299) {
+    if (statusCode < 200 || statusCode > 299) {
       console.debug('Request failed', details);
       return;
     }

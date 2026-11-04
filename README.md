@@ -35,6 +35,10 @@ _Disclaimer: This extension is not endorsed by, directly affiliated with, mainta
 
 The extension never asks for your Apple ID password. Sign in to [icloud.com](https://www.icloud.com) in the same browser, including two-factor authentication and **Trust This Browser**. The extension then uses the icloud.com session already stored in your browser. The quickstart guide opens after installation and walks through these steps.
 
+### Privacy
+
+The extension uses your iCloud session, aliases, forwarding addresses, and the current site's hostname to create, fill, and manage aliases. Focusing an email field requests a candidate alias and displays it on the page. The extension saves preferences and muted-site hostnames locally. Read the [privacy policy](PRIVACY.md) for the data it handles, its recipients, and your controls.
+
 ## Build from source
 
 ### Prerequisites
@@ -124,7 +128,7 @@ The extension is written in TypeScript. The pop-up, settings, and quickstart pag
 ### One-time setup
 
 1. Register as a developer in the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/). Registration requires a one-time fee and two-step verification on your Google account.
-2. For the first release of this repository, create a new item. For later releases, update the item created for this repository.
+2. Open this repository's existing item, `eonbenacgcfedfjbppfaennjpijldnjn`. Reuse it for this release and future updates.
 
 ### Release a version
 
@@ -167,9 +171,11 @@ The extension is written in TypeScript. The pop-up, settings, and quickstart pag
    | `notifications`                                      | Tells you when the extension is ready after you sign in.                                                                     |
    | Host permissions on `icloud.com` and `icloud.com.cn` | Calls the iCloud Hide My Email API with the browser's existing icloud.com session.                                           |
 
-   For remote code, answer that the extension does not use remote code. All code, including fonts, is bundled in the package. For data usage, declare that the extension handles authentication information: it uses your icloud.com session cookies to call iCloud, and it does not send data anywhere else.
+   Explain website content-script access too. The extension runs on HTTP and HTTPS pages to find email fields and fill a chosen alias. The current site's hostname supplies editable alias metadata and muted-site settings.
 
-7. Select **Submit for review**. You can choose to publish automatically after approval or to publish manually.
+   For remote code, answer that the extension does not use remote code after checking the production package. JavaScript, fonts, and icons are bundled locally. For data usage, disclose email identifiers, authentication information, current-site URL and hostname handling, and website email-field access, including local processing. Provide a public URL for the [privacy policy](PRIVACY.md). Keep the dashboard disclosures consistent with the policy and the package.
+
+7. Verify the publisher's contact email and complete the remaining dashboard fields. Select **Submit for review**. To keep approval separate from public release, disable automatic publishing and publish manually after approval.
 
 Review can take from a few days to a few weeks. Changes to permissions can take longer.
 

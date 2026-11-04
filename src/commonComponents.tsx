@@ -356,12 +356,14 @@ export const Toggle = (props: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   'aria-label': string;
+  disabled?: boolean;
 }) => (
   <button
     type="button"
     role="switch"
     aria-checked={props.checked}
     aria-label={props['aria-label']}
+    disabled={props.disabled}
     onClick={() => props.onChange(!props.checked)}
     className={`relative w-8 h-[18px] shrink-0 rounded-full border-[1.5px] border-ink transition-colors ${
       props.checked ? 'bg-ink' : 'bg-white'

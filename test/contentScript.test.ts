@@ -290,36 +290,55 @@ describe('fields added and removed after load', () => {
     );
   });
 
-  it.fails(
-    'tracks an email field appended directly to the page (known bug: observer only searches descendants of added nodes)',
-    async () => {
-      await loadPage('<main></main>');
-      const field = document.createElement('input');
-      field.type = 'email';
-      document.body.append(field);
-      await settle();
+  it('tracks an email field appended directly to the page', async () => {
+    await loadPage('<main></main>');
+    const field = document.createElement('input');
+    field.type = 'email';
+    document.body.append(field);
+    await settle();
 
-      field.focus();
-      await settle();
+    field.focus();
+    await settle();
 
-      expect(suggestion()).not.toBeNull();
-    }
-  );
+    expect(suggestion()).not.toBeNull();
+  });
 
-  it.fails(
-    'tracks two identical email fields inserted together (known bug: fields are deduplicated with isEqualNode)',
-    async () => {
-      const page = await loadPage('<main></main>');
-      const container = document.createElement('div');
-      container.innerHTML = '<input type="email"><input type="email">';
-      document.querySelector('main')?.append(container);
-      await settle();
+  it('tracks two identical email fields inserted together', async () => {
+    const page = await loadPage('<main></main>');
+    const container = document.createElement('div');
+    container.innerHTML = '<input type="email"><input type="email">';
+    document.querySelector('main')?.append(container);
+    await settle();
 
-      await expect(page.deliver(MessageType.Autofill, 'x@y.com')).resolves.toBe(
-        2
-      );
-    }
-  );
+    await expect(page.deliver(MessageType.Autofill, 'x@y.com')).resolves.toBe(
+      2
+    );
+  });
+
+  it('stops filling an email input removed directly from the page', async () => {
+    const page = await loadPage('<input type="email">');
+    const removed = input();
+    removed.remove();
+    await settle();
+
+    await expect(page.deliver(MessageType.Autofill, 'x@y.com')).resolves.toBe(
+      0
+    );
+    expect(removed.value).toBe('');
+  });
+
+  it('keeps filling an identical surviving input when the other container is removed', async () => {
+    const page = await loadPage(
+      '<div id="a"><input type="email"></div><div id="b"><input type="email"></div>'
+    );
+    document.getElementById('b')?.remove();
+    await settle();
+
+    await expect(page.deliver(MessageType.Autofill, 'x@y.com')).resolves.toBe(
+      1
+    );
+    expect(input('#a input').value).toBe('x@y.com');
+  });
 });
 
 describe('messages from the popup and context menu', () => {

@@ -131,8 +131,10 @@ const TechnicalOverview = () => (
         the icloud.com cookies already in your browser.
       </PageRow>
       <PageRow label="Permissions">
-        Host permission on icloud.com only. The browser treats those requests as
-        same-origin and includes your cookies.
+        Access to icloud.com and icloud.com.cn lets the extension call iCloud.
+        Website access finds email fields and fills the alias you choose. The
+        hostname of the current site supplies alias labels and identifies sites
+        where you disabled suggestions.
       </PageRow>
       <PageRow label="Your password">
         Never seen by the extension. It only ever uses the session icloud.com

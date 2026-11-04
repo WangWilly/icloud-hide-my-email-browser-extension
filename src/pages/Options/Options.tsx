@@ -187,7 +187,7 @@ const AUTOFILL_ROWS: {
 };
 
 const AutofillForm = () => {
-  const [options, setOptions] = useBrowserStorageState(
+  const [options, setOptions, isLoading] = useBrowserStorageState(
     'iCloudHmeOptions',
     DEFAULT_STORE.iCloudHmeOptions
   );
@@ -202,11 +202,12 @@ const AutofillForm = () => {
             <Toggle
               aria-label={AUTOFILL_ROWS[key].label}
               checked={options.autofill[key]}
+              disabled={isLoading}
               onChange={(checked) =>
-                setOptions({
-                  ...options,
-                  autofill: { ...options.autofill, [key]: checked },
-                })
+                setOptions((previous) => ({
+                  ...previous,
+                  autofill: { ...previous.autofill, [key]: checked },
+                }))
               }
             />
           }
@@ -219,7 +220,7 @@ const AutofillForm = () => {
 };
 
 const MutedSites = () => {
-  const [mutedSites, setMutedSites] = useBrowserStorageState(
+  const [mutedSites, setMutedSites, isLoading] = useBrowserStorageState(
     'mutedSites',
     DEFAULT_STORE.mutedSites
   );
@@ -240,6 +241,7 @@ const MutedSites = () => {
               <button
                 type="button"
                 className="text-[12px] text-muted hover:text-ink"
+                disabled={isLoading}
                 onClick={() =>
                   setMutedSites((prev) => prev.filter((s) => s !== site))
                 }

@@ -197,7 +197,7 @@ const useCopy = (): [boolean, (text: string) => Promise<void>] => {
 };
 
 const MuteSiteButton = (props: { host: string }) => {
-  const [mutedSites, setMutedSites] = useBrowserStorageState(
+  const [mutedSites, setMutedSites, isLoading] = useBrowserStorageState(
     'mutedSites',
     DEFAULT_STORE.mutedSites
   );
@@ -213,6 +213,7 @@ const MuteSiteButton = (props: { host: string }) => {
       type="button"
       className="hover:text-ink"
       aria-pressed={isMuted}
+      disabled={isLoading}
       onClick={() =>
         setMutedSites((prev) =>
           prev.includes(props.host)
@@ -1139,7 +1140,7 @@ const Popup = () => {
       setClientAuthStateSynced(true);
     };
 
-    if (!isClientStateLoading && !clientAuthStateSynced) {
+    if (!isStateLoading && !isClientStateLoading && !clientAuthStateSynced) {
       syncClientAuthState();
     }
   }, [
@@ -1147,6 +1148,7 @@ const Popup = () => {
     setClientState,
     clientAuthStateSynced,
     clientState,
+    isStateLoading,
     isClientStateLoading,
   ]);
 

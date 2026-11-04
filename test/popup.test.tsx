@@ -42,7 +42,8 @@ const signedIn = (popupState: PopupState) => {
 };
 
 const openPopup = async (
-  options: { tabUrl?: string; emailFields?: number } = {}
+  options: { tabUrl?: string; emailFields?: number } = {},
+  popup = ext.context({ kind: 'page', page: 'popup' })
 ) => {
   const { tabUrl = 'https://shop.example.com/signup', emailFields = 1 } =
     options;
@@ -57,7 +58,6 @@ const openPopup = async (
     return Promise.resolve(emailFields);
   });
 
-  const popup = ext.context({ kind: 'page', page: 'popup' });
   const { default: Popup } = await loadIn(
     popup,
     () => import('../src/pages/Popup/Popup')
@@ -274,6 +274,43 @@ describe('creating an address', () => {
     await user.click(screen.getByText('Suggest on this site again'));
     expect(ext.storage.mutedSites).toEqual(['other.example.com']);
   });
+
+  it('waits for muted sites before editing and preserves other saved hosts', async () => {
+    ext.storage.mutedSites = ['other.example.com'];
+    const popup = ext.context({ kind: 'page', page: 'popup' });
+    let release: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(popup.browser.storage.local, 'get').mockImplementation(
+      async (keys) => {
+        const snapshot = ext.readStorage(keys);
+        if (keys === 'mutedSites') await pending;
+        return snapshot;
+      }
+    );
+    await openPopup({}, popup);
+    const control = await screen.findByRole<HTMLButtonElement>('button', {
+      name: "Don't suggest on this site",
+    });
+
+    await user.click(control);
+    expect(ext.storage.mutedSites).toEqual(['other.example.com']);
+    expect(control.disabled).toBe(true);
+
+    release();
+    await act(() => settle());
+    expect(control.disabled).toBe(false);
+    await user.click(control);
+    expect(ext.storage.mutedSites).toEqual([
+      'other.example.com',
+      'shop.example.com',
+    ]);
+    await user.click(
+      screen.getByRole('button', { name: 'Suggest on this site again' })
+    );
+    expect(ext.storage.mutedSites).toEqual(['other.example.com']);
+  });
 });
 
 describe('addresses saved for the current site', () => {
@@ -367,6 +404,35 @@ describe('managing addresses', () => {
     await openPopup();
     expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
   });
+
+  it.each(['popupState', 'clientState'])(
+    'preserves the saved Manage screen while %s loads last',
+    async (delayedKey) => {
+      const popup = ext.context({ kind: 'page', page: 'popup' });
+      let release: () => void = () => undefined;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(popup.browser.storage.local, 'get').mockImplementation(
+        async (keys) => {
+          const snapshot = ext.readStorage(keys);
+          if (keys === delayedKey) await pending;
+          return snapshot;
+        }
+      );
+      await openPopup({}, popup);
+      await act(() => settle());
+
+      expect(ext.storage.popupState).toBe(PopupState.AuthenticatedAndManaging);
+      expect(screen.getByText('Checking your iCloud session')).toBeTruthy();
+      release();
+      await act(() => settle());
+
+      expect(ext.storage.popupState).toBe(PopupState.AuthenticatedAndManaging);
+      expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
+      expect(icloud.generated).toEqual([]);
+    }
+  );
 
   it('lists the five newest first and reveals the rest on demand', async () => {
     icloud.hmeEmails = [1, 7, 3, 5, 2, 6, 4].map((n) =>
