@@ -63,7 +63,7 @@ describe('built manifest.json', () => {
       background: { scripts: ['background.bundle.js'] },
       browser_specific_settings: {
         gecko: {
-          id: '{5f2806a5-f66d-40c6-8fb2-6018753b5626}',
+          id: '@icloud-hide-my-email.wangwilly',
           strict_min_version: '113.0',
         },
       },

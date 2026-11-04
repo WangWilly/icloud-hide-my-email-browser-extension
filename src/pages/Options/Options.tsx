@@ -20,7 +20,7 @@ import { deepEqual } from '../../deepEqual';
 import { Autofill, DEFAULT_STORE } from '../../storage';
 
 const SOURCE_URL =
-  'https://github.com/dedoussis/icloud-hide-my-email-browser-extension';
+  'https://github.com/WangWilly/icloud-hide-my-email-browser-extension';
 
 const SIGNED_OUT_COPY =
   'Sign in through the extension pop-up to change where mail goes.';
@@ -261,8 +261,8 @@ const About = () => (
     <PageRow label="Version" mono>
       {browser.runtime.getManifest().version}
     </PageRow>
-    <PageRow label="Developer">
-      Dimitrios Dedoussis. Not endorsed by or affiliated with Apple.
+    <PageRow label="Maintainer">
+      WangWilly. Not endorsed by or affiliated with Apple.
     </PageRow>
     <PageRow label="Source" mono>
       <a
@@ -271,7 +271,7 @@ const About = () => (
         rel="noreferrer"
         className="break-all hover:underline"
       >
-        github.com/dedoussis/icloud-hide-my-email-browser-extension
+        github.com/WangWilly/icloud-hide-my-email-browser-extension
       </a>
     </PageRow>
     <PageRow label="License">

@@ -1,15 +1,17 @@
 # iCloud Hide My Email Browser Extension
 
-[![Tests Status](https://github.com/dedoussis/icloud-hide-my-email-browser-extension/workflows/tests/badge.svg)](https://github.com/dedoussis/icloud-hide-my-email-browser-extension/actions/workflows/tests.yml)
+[![Tests Status](https://github.com/WangWilly/icloud-hide-my-email-browser-extension/actions/workflows/tests.yaml/badge.svg)](https://github.com/WangWilly/icloud-hide-my-email-browser-extension/actions/workflows/tests.yaml)
 
 [Hide My Email](https://support.apple.com/en-us/HT210425) is a privacy service that comes with iCloud+. Safari offers to create a Hide My Email address whenever you sign up on a website. This extension brings the same flow to other browsers:
 
-- [Chrome](https://chrome.google.com/webstore/detail/icloud-hide-my-email/omiaekblhgfopjkjnenhahfgcgnbohlk)
-- [Firefox](https://addons.mozilla.org/en-US/firefox/addon/icloud-hide-my-email/)
-- [Brave](https://chrome.google.com/webstore/detail/icloud-hide-my-email/omiaekblhgfopjkjnenhahfgcgnbohlk)
-- Microsoft Edge
+- [Chrome](#chrome-and-other-chromium-based-browsers)
+- [Firefox](#firefox)
+- [Brave](#chrome-and-other-chromium-based-browsers)
+- [Microsoft Edge](#chrome-and-other-chromium-based-browsers)
 
 It should work on any Chromium-based browser that supports Manifest V3 extensions.
+
+[WangWilly](https://github.com/WangWilly) maintains this fork. Get the source from [WangWilly/icloud-hide-my-email-browser-extension](https://github.com/WangWilly/icloud-hide-my-email-browser-extension) and report bugs or request support in [GitHub Issues](https://github.com/WangWilly/icloud-hide-my-email-browser-extension/issues). The browser links above lead to instructions for installing this repository from source.
 
 _Disclaimer: This extension is not endorsed by, directly affiliated with, maintained, authorized, or sponsored by Apple._
 
@@ -40,7 +42,12 @@ The extension never asks for your Apple ID password. Sign in to [icloud.com](htt
 - Node.js 25.1, as pinned in `.nvmrc`. If you use nvm, run `nvm use`.
 - npm, which ships with Node.js.
 
-Run all commands from the root of this repository.
+Clone this repository, then run all commands from its root:
+
+```bash
+git clone https://github.com/WangWilly/icloud-hide-my-email-browser-extension.git
+cd icloud-hide-my-email-browser-extension
+```
 
 ### Build
 
@@ -117,7 +124,7 @@ The extension is written in TypeScript. The pop-up, settings, and quickstart pag
 ### One-time setup
 
 1. Register as a developer in the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/). Registration requires a one-time fee and two-step verification on your Google account.
-2. If you publish a fork, create a new item. The existing store listing belongs to its owner, and only that account can upload new versions to it.
+2. For the first release of this repository, create a new item. For later releases, update the item created for this repository.
 
 ### Release a version
 
@@ -190,4 +197,4 @@ Edge accepts the same zip as the Chrome Web Store. Upload it in [Microsoft Partn
 
    In the reviewer notes, point to the [Build from source](#build-from-source) section of this README.
 
-If you publish a fork, change the add-on ID in `browser_specific_settings.gecko.id` in `webpack.config.js`. The current ID belongs to the existing AMO listing.
+This fork uses the stable Firefox add-on ID `@icloud-hide-my-email.wangwilly`, set in `browser_specific_settings.gecko.id` in `webpack.config.js`. Keep this ID for future releases of this fork. If you publish a separate fork, choose a different ID before the first release.
