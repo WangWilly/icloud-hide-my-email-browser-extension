@@ -5,7 +5,7 @@ import {
   SetStateAction,
   useCallback,
 } from 'react';
-import isEqual from 'lodash.isequal';
+import { deepEqual } from './deepEqual';
 import {
   getBrowserStorageValue,
   setBrowserStorageValue,
@@ -26,7 +26,7 @@ export function useBrowserStorageState<K extends keyof Store>(
 
       if (value !== undefined) {
         setState((prevState) =>
-          isEqual(prevState, value) ? prevState : value
+          deepEqual(prevState, value) ? prevState : value
         );
       }
     }
