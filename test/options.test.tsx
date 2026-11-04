@@ -2,7 +2,7 @@
 import React from 'react';
 import { act, render, renderHook, screen } from '@testing-library/react';
 import userEvent, { UserEvent } from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETUP_URL } from '../src/iCloudClient';
 import { FakeExtension } from './fakes/extension';
 import { FakeICloud, PMS_URLS } from './fakes/icloud';
@@ -17,8 +17,9 @@ beforeEach(() => {
   user = userEvent.setup();
 });
 
-const openOptions = async () => {
-  const page = ext.context({ kind: 'page', page: 'options' });
+const openOptions = async (
+  page = ext.context({ kind: 'page', page: 'options' })
+) => {
   const { default: Options } = await loadIn(
     page,
     () => import('../src/pages/Options/Options')
@@ -64,6 +65,49 @@ describe('autofill settings', () => {
     expect(ext.storage.iCloudHmeOptions).toEqual({
       autofill: { button: false, contextMenu: true },
     });
+  });
+
+  it('waits for saved preferences before allowing edits, then preserves the other toggle', async () => {
+    ext.storage.iCloudHmeOptions = {
+      autofill: { button: true, contextMenu: false },
+    };
+    const page = ext.context({ kind: 'page', page: 'options' });
+    let release: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(page.browser.storage.local, 'get').mockImplementation(
+      async (keys) => {
+        const snapshot = ext.readStorage(keys);
+        if (keys === 'iCloudHmeOptions') await pending;
+        return snapshot;
+      }
+    );
+    await openOptions(page);
+    const control = screen.getByRole<HTMLButtonElement>('switch', {
+      name: 'Email fields',
+    });
+
+    await user.click(control);
+    expect(ext.storage.iCloudHmeOptions).toEqual({
+      autofill: { button: true, contextMenu: false },
+    });
+    expect(control.disabled).toBe(true);
+
+    release();
+    await act(() => settle());
+    expect(control.disabled).toBe(false);
+    expect(control.getAttribute('aria-checked')).toBe('true');
+    await user.click(control);
+
+    expect(ext.storage.iCloudHmeOptions).toEqual({
+      autofill: { button: false, contextMenu: false },
+    });
+    expect(
+      screen
+        .getByRole('switch', { name: 'Right-click menu' })
+        .getAttribute('aria-checked')
+    ).toBe('false');
   });
 });
 
@@ -142,8 +186,9 @@ describe('forwarding address', () => {
 });
 
 describe('useBrowserStorageState', () => {
-  const loadHook = async () => {
-    const page = ext.context({ kind: 'page', page: 'options' });
+  const loadHook = async (
+    page = ext.context({ kind: 'page', page: 'options' })
+  ) => {
     return (await loadIn(page, () => import('../src/hooks')))
       .useBrowserStorageState;
   };
@@ -177,20 +222,80 @@ describe('useBrowserStorageState', () => {
     expect('clientState' in ext.storage).toBe(false);
   });
 
-  it.fails(
-    'keeps a value set before the stored one finished loading (known bug: the late load overwrites it)',
-    async () => {
-      ext.storage.mutedSites = ['old.example.com'];
-      const useBrowserStorageState = await loadHook();
-      const { result } = renderHook(() =>
-        useBrowserStorageState('mutedSites', [])
-      );
+  it('keeps a value set before the stored one finished loading', async () => {
+    ext.storage.mutedSites = ['old.example.com'];
+    const useBrowserStorageState = await loadHook();
+    const { result } = renderHook(() =>
+      useBrowserStorageState('mutedSites', [])
+    );
 
-      act(() => result.current[1](['new.example.com']));
-      await act(() => settle());
+    act(() => result.current[1](['new.example.com']));
+    await act(() => settle());
 
-      expect(ext.storage.mutedSites).toEqual(['new.example.com']);
-      expect(result.current[0]).toEqual(['new.example.com']);
-    }
-  );
+    expect(ext.storage.mutedSites).toEqual(['new.example.com']);
+    expect(result.current[0]).toEqual(['new.example.com']);
+  });
+
+  it('keeps two early updates when the older stored value arrives', async () => {
+    ext.storage.mutedSites = ['old.example.com'];
+    const useBrowserStorageState = await loadHook();
+    const { result } = renderHook(() =>
+      useBrowserStorageState('mutedSites', [])
+    );
+
+    act(() => {
+      result.current[1](['first.example.com']);
+      result.current[1]((previous) => [...previous, 'second.example.com']);
+    });
+    await act(() => settle());
+
+    expect(result.current[0]).toEqual([
+      'first.example.com',
+      'second.example.com',
+    ]);
+    expect(ext.storage.mutedSites).toEqual([
+      'first.example.com',
+      'second.example.com',
+    ]);
+    expect(result.current[2]).toBe(false);
+  });
+
+  it('does not apply an obsolete key read or clear loading for the current key', async () => {
+    ext.storage.mutedSites = ['old.example.com'];
+    const storedClient = { setupUrl: DEFAULT_SETUP_URL, webservices: {} };
+    ext.storage.clientState = storedClient;
+    const page = ext.context({ kind: 'page', page: 'options' });
+    let releaseOld: () => void = () => undefined;
+    let releaseCurrent: () => void = () => undefined;
+    const oldRead = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    const currentRead = new Promise<void>((resolve) => {
+      releaseCurrent = resolve;
+    });
+    vi.spyOn(page.browser.storage.local, 'get').mockImplementation(
+      async (keys) => {
+        const snapshot = ext.readStorage(keys);
+        await (keys === 'mutedSites' ? oldRead : currentRead);
+        return snapshot;
+      }
+    );
+    const useBrowserStorageState = await loadHook(page);
+    const { result, rerender } = renderHook(
+      ({ storageKey }: { storageKey: 'mutedSites' | 'clientState' }) =>
+        useBrowserStorageState(storageKey, []),
+      { initialProps: { storageKey: 'mutedSites' } }
+    );
+
+    rerender({ storageKey: 'clientState' });
+    releaseOld();
+    await act(() => settle());
+
+    expect(result.current[0]).toEqual([]);
+    expect(result.current[2]).toBe(true);
+    releaseCurrent();
+    await act(() => settle());
+    expect(result.current[0]).toEqual(storedClient);
+    expect(result.current[2]).toBe(false);
+  });
 });
