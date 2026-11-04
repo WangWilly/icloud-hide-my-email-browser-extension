@@ -203,12 +203,18 @@ export default async function main(): Promise<void> {
           return;
         }
 
-        const addedElements = node.querySelectorAll<HTMLInputElement>(
-          EMAIL_INPUT_QUERY_STRING
-        );
+        const addedElements = [
+          ...node.querySelectorAll<HTMLInputElement>(EMAIL_INPUT_QUERY_STRING),
+        ];
+        if (
+          node instanceof HTMLInputElement &&
+          node.matches(EMAIL_INPUT_QUERY_STRING)
+        ) {
+          addedElements.unshift(node);
+        }
         addedElements.forEach((el) => {
-          const elementExists = autofillableInputElements.some((item) =>
-            el.isEqualNode(item.inputElement)
+          const elementExists = autofillableInputElements.some(
+            (item) => el === item.inputElement
           );
           if (!elementExists) {
             autofillableInputElements.push(makeAutofillableInputElement(el));
@@ -221,12 +227,18 @@ export default async function main(): Promise<void> {
           return;
         }
 
-        const removedElements = node.querySelectorAll<HTMLInputElement>(
-          EMAIL_INPUT_QUERY_STRING
-        );
+        const removedElements = [
+          ...node.querySelectorAll<HTMLInputElement>(EMAIL_INPUT_QUERY_STRING),
+        ];
+        if (
+          node instanceof HTMLInputElement &&
+          node.matches(EMAIL_INPUT_QUERY_STRING)
+        ) {
+          removedElements.unshift(node);
+        }
         removedElements.forEach((el) => {
-          const foundIndex = autofillableInputElements.findIndex((item) =>
-            el.isEqualNode(item.inputElement)
+          const foundIndex = autofillableInputElements.findIndex(
+            (item) => el === item.inputElement
           );
           if (foundIndex !== -1) {
             const [{ inputElement, buttonSupport }] =
