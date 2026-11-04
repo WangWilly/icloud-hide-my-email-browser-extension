@@ -148,19 +148,139 @@ describe('suggestion requests from a page', () => {
     expect(icloud.hmeEmails).toEqual([]);
   });
 
-  it.fails(
-    'answers the tab that asked even when another tab has focus (known bug: replies go to the active tab)',
-    async () => {
+  it('answers the tab that asked even when another tab has focus', async () => {
+    icloud.signIn();
+    ext.storage.clientState = storedClient();
+    await startBackground(ext);
+    const asking = openPage('https://asking.example.com/');
+    const focused = openPage('https://focused.example.com/');
+
+    await requestGeneration(asking.content, 'btn-1');
+
+    expect(focused.inbox).toEqual([]);
+    expect(asking.inbox).toHaveLength(1);
+  });
+
+  it.each([false, true])(
+    'keeps the generation response with the asking tab after focus moves, failure=%s',
+    async (failure) => {
+      icloud.signIn();
+      if (failure) {
+        icloud.fail('POST /v1/hme/generate', { errorMessage: 'Limit reached' });
+      }
+      ext.storage.clientState = storedClient();
+      await startBackground(ext);
+      const asking = openPage('https://asking.example.com/');
+      let release: () => void = () => undefined;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
+        if (String(args[0]).endsWith('/v1/hme/generate')) {
+          await pending;
+        }
+        return icloud.fetch(...args);
+      });
+
+      const request = requestGeneration(asking.content);
+      await settle();
+      const focused = openPage('https://focused.example.com/');
+      release();
+      await request;
+
+      expect(focused.inbox).toEqual([]);
+      expect(asking.inbox).toEqual([
+        {
+          type: MessageType.GenerateResponse,
+          data: failure
+            ? { error: 'Error: Limit reached', elementId: 'btn-1' }
+            : { hme: icloud.generated[0], elementId: 'btn-1' },
+        },
+      ]);
+    }
+  );
+
+  it('sends a signed-out response to the asking tab when another tab has focus', async () => {
+    await startBackground(ext);
+    const asking = openPage('https://asking.example.com/');
+    const focused = openPage('https://focused.example.com/');
+
+    await requestGeneration(asking.content);
+
+    expect(focused.inbox).toEqual([]);
+    expect(asking.inbox).toEqual([
+      {
+        type: MessageType.GenerateResponse,
+        data: { error: SIGNED_OUT_CTA_COPY, elementId: 'btn-1' },
+      },
+    ]);
+  });
+
+  it.each([false, true])(
+    'keeps the reservation response with the asking tab after focus moves, failure=%s',
+    async (failure) => {
       icloud.signIn();
       ext.storage.clientState = storedClient();
       await startBackground(ext);
       const asking = openPage('https://asking.example.com/');
-      const focused = openPage('https://focused.example.com/');
+      await requestGeneration(asking.content);
+      const hme = icloud.generated[0];
+      if (failure) {
+        icloud.fail('POST /v1/hme/reserve', { errorMessage: 'Address taken' });
+      }
+      let release: () => void = () => undefined;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.stubGlobal('fetch', async (...args: Parameters<typeof fetch>) => {
+        if (String(args[0]).endsWith('/v1/hme/reserve')) {
+          await pending;
+        }
+        return icloud.fetch(...args);
+      });
 
-      await requestGeneration(asking.content, 'btn-1');
+      const request = asking.content.browser.runtime.sendMessage({
+        type: MessageType.ReservationRequest,
+        data: { hme, label: 'asking.example.com', elementId: 'btn-1' },
+      });
+      await settle();
+      const focused = openPage('https://focused.example.com/');
+      release();
+      await request;
 
       expect(focused.inbox).toEqual([]);
-      expect(asking.inbox).toHaveLength(1);
+      expect(asking.inbox.at(-1)).toEqual({
+        type: MessageType.ReservationResponse,
+        data: failure
+          ? { error: 'Error: Address taken', elementId: 'btn-1' }
+          : { hme, elementId: 'btn-1' },
+      });
+      expect(icloud.address(hme)?.label).toBe(
+        failure ? undefined : 'asking.example.com'
+      );
+    }
+  );
+
+  it.each([MessageType.GenerateRequest, MessageType.ReservationRequest])(
+    'ignores suggestion request %s without a sender tab',
+    async (type) => {
+      icloud.signIn();
+      ext.storage.clientState = storedClient();
+      await startBackground(ext);
+      const focused = openPage();
+      const popup = ext.context({ kind: 'page', page: 'popup' });
+
+      await popup.browser.runtime.sendMessage({
+        type,
+        data:
+          type === MessageType.GenerateRequest
+            ? 'btn-1'
+            : { hme: 'unreserved@x.com', label: 'shop', elementId: 'btn-1' },
+      });
+
+      expect(focused.inbox).toEqual([]);
+      expect(icloud.requestsTo('POST /v1/hme/generate')).toEqual([]);
+      expect(icloud.requestsTo('POST /v1/hme/reserve')).toEqual([]);
     }
   );
 });
@@ -568,16 +688,31 @@ describe('install and icloud.com sign-in sync', () => {
     });
   });
 
-  it.fails(
-    'keeps the session when the icloud.com logout request fails (known bug: inverted status guard at Background/index.ts:337)',
-    async () => {
+  it.each([199, 500])(
+    'keeps the session when the icloud.com logout request fails with %s',
+    async (statusCode) => {
       icloud.signIn();
       ext.storage.clientState = storedClient();
       await startBackground(ext);
 
-      await ext.respond(`${DEFAULT_SETUP_URL}/logout`, 500);
+      await ext.respond(`${DEFAULT_SETUP_URL}/logout`, statusCode);
       await settle();
 
+      expect(ext.storage.clientState).toEqual(storedClient());
+    }
+  );
+
+  it.each([199, 500])(
+    'ignores an unsuccessful accountLogin response with %s',
+    async (statusCode) => {
+      icloud.signIn();
+      ext.storage.clientState = storedClient();
+      await startBackground(ext);
+
+      await ext.respond(`${DEFAULT_SETUP_URL}/accountLogin`, statusCode);
+      await settle();
+
+      expect(ext.notifications).toEqual([]);
       expect(ext.storage.clientState).toEqual(storedClient());
     }
   );
