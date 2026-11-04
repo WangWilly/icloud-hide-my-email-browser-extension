@@ -13,7 +13,7 @@ import {
 import { isFirefox } from '../../browserUtils';
 
 const SOURCE_URL =
-  'https://github.com/dedoussis/icloud-hide-my-email-browser-extension';
+  'https://github.com/WangWilly/icloud-hide-my-email-browser-extension';
 
 const SignInInstructions = () => (
   <Section title="1 · Sign in to iCloud">
@@ -145,7 +145,7 @@ const TechnicalOverview = () => (
           rel="noreferrer"
           className="break-all hover:underline"
         >
-          github.com/dedoussis/icloud-hide-my-email-browser-extension
+          github.com/WangWilly/icloud-hide-my-email-browser-extension
         </a>
       </PageRow>
     </Record>

@@ -1,5 +1,7 @@
 {
   "name": "iCloud Hide My Email",
+  "author": "WangWilly",
+  "homepage_url": "https://github.com/WangWilly/icloud-hide-my-email-browser-extension",
   "description": "Use iCloud's Hide My Email service on Chrome.",
   "manifest_version": 3,
   "background": { "service_worker": "background.bundle.js" },
