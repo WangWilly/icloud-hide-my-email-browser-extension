@@ -16,7 +16,7 @@ import {
   TextLink,
   Toggle,
 } from '../../commonComponents';
-import isEqual from 'lodash.isequal';
+import { deepEqual } from '../../deepEqual';
 import { Autofill, DEFAULT_STORE } from '../../storage';
 
 const SOURCE_URL =
@@ -61,7 +61,7 @@ const SelectFwdToForm = () => {
         const pms = new PremiumMailSettings(client);
         const result = await pms.listHme();
         setFwdToEmails((prevState) =>
-          isEqual(prevState, result.forwardToEmails)
+          deepEqual(prevState, result.forwardToEmails)
             ? prevState
             : result.forwardToEmails
         );
